@@ -1,0 +1,27 @@
+name: "Budżet domowy"
+version: "0.1.0"
+slug: "budget"
+description: >-
+  Planowanie i śledzenie domowego budżetu: wpływy, wydatki, wydatki stałe
+  (automatyczne co miesiąc), kategorie z planowanymi budżetami, wykresy
+  miesiąca i pełna historia. Dane zapisywane lokalnie (SQLite), panel
+  w Home Assistant przez ingress.
+url: "https://github.com/ravek71/HA_Budget_App"
+arch:
+  - amd64
+  - aarch64
+image: "ghcr.io/ravek71/budget-app"
+startup: application
+boot: auto
+ports:
+  8099/tcp: 8080
+ingress: true
+options:
+  log_level: "info"
+  auto_recurring: true
+schema:
+  log_level: list(debug|info|warning|error)
+  auto_recurring: bool
+watchdog: "http://[HOST]:[PORT:8080]/healthz"
+panel_icon: mdi:wallet-outline
+panel_title: "Budżet domowy"

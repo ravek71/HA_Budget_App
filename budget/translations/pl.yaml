@@ -1,0 +1,7 @@
+configuration:
+  log_level:
+    name: "Poziom logów"
+    description: "Szczegółowość logów aplikacji."
+  auto_recurring:
+    name: "Automatyczne wydatki stałe"
+    description: "Księguj wydatki stałe (kategorie oznaczone „stała” z budżetem) automatycznie 1. dnia miesiąca."
