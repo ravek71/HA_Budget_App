@@ -96,14 +96,17 @@ td.num,th.num{text-align:right}
 
   <section id="view-dodaj" class="hidden">
     <div class="card">
-      <b>Dodaj transakcję</b>
+      <b id="t-title">Dodaj transakcję</b>
       <div class="row" style="margin-top:10px">
         <div class="f"><label>Kategoria</label><select id="t-cat"></select></div>
         <div style="width:150px"><label>Kwota (zł)</label><input id="t-amt" type="number" step="0.01" min="0.01" placeholder="0.00"></div>
         <div style="width:170px"><label>Data</label><input id="t-date" type="date"></div>
       </div>
       <div style="margin-top:10px"><label>Notatka</label><input id="t-note" type="text" placeholder="np. Biedronka"></div>
-      <div class="row" style="margin-top:12px"><button id="t-add">Dodaj transakcję</button></div>
+      <div class="row" style="margin-top:12px">
+        <button id="t-add">Dodaj transakcję</button>
+        <button id="t-cancel" class="ghost hidden" style="margin-left:8px">Anuluj</button>
+      </div>
       <p class="small" style="margin-bottom:0">Kwota zawsze dodatnia — kierunek (wpływ/wydatek) wynika z typu kategorii.</p>
     </div>
   </section>
@@ -152,6 +155,14 @@ let view = "pulpit";
 let catYear = new Date().getFullYear(), catMonth = new Date().getMonth() + 1;
 let histY = catYear, histM = catMonth;
 let cats = [];
+let editTx = null;
+
+function setEdit(tx) {
+  editTx = tx;
+  $("t-title").textContent = tx ? "Edytuj transakcję" : "Dodaj transakcję";
+  $("t-add").textContent = tx ? "Zapisz zmiany" : "Dodaj transakcję";
+  $("t-cancel").classList.toggle("hidden", !tx);
+}
 
 function money(x) {
   return (x < 0 ? "-" : "") + Math.abs(x).toFixed(2).replace(".", ",") + " zł";
@@ -179,7 +190,7 @@ function show(v) {
   else if (v === "kategorie") loadCats();
   else if (v === "historia") loadHist();
 }
-document.querySelectorAll(".tab").forEach(t => { t.onclick = () => show(t.dataset.view); });
+document.querySelectorAll(".tab").forEach(t => { t.onclick = () => { if (t.dataset.view === "dodaj") setEdit(null); show(t.dataset.view); }; });
 
 async function loadCats() {
   cats = (await api("/api/categories")).categories;
@@ -270,6 +281,17 @@ $("t-add").onclick = async () => {
   };
   if (!body.category) return msg("Wybierz kategorię (zakładka Kategorie)", "err");
   if (!(body.amount > 0)) return msg("Podaj kwotę większą od zera", "err");
+  if (editTx) {
+    if (!body.date) return msg("Podaj datę", "err");
+    try {
+      await api("/api/transactions/" + editTx.id, { method: "PUT", body: JSON.stringify(body) });
+      msg("Zaktualizowano transakcję", "ok");
+      setEdit(null);
+      $("t-amt").value = ""; $("t-note").value = "";
+      show("historia");
+    } catch (e) { msg(e.message, "err"); }
+    return;
+  }
   try {
     await api("/api/transactions", { method: "POST", body: JSON.stringify(body) });
     msg("Zapisano transakcję", "ok");
@@ -278,7 +300,21 @@ $("t-add").onclick = async () => {
   } catch (e) { msg(e.message, "err"); }
 };
 
-async function loadAdd() { await loadCats(); }
+$("t-cancel").onclick = () => {
+  setEdit(null);
+  $("t-amt").value = ""; $("t-note").value = "";
+  show("historia");
+};
+
+async function loadAdd() {
+  await loadCats();
+  if (editTx) {
+    $("t-cat").value = editTx.category_key;
+    $("t-amt").value = editTx.amount;
+    $("t-date").value = editTx.date;
+    $("t-note").value = editTx.note || "";
+  }
+}
 async function loadPulpit() {
   const s = await api("/api/summary?year=" + catYear + "&month=" + catMonth);
   $("mtitle").textContent = MIES[catMonth - 1] + " " + catYear;
@@ -378,7 +414,7 @@ async function loadTx() {
       '<td></td>' +
       '<td class="num ' + (cc.kind === "income" ? "pos" : "neg") + '"></td>' +
       '<td class="small"></td>' +
-      '<td style="text-align:right"><button class="danger" data-del="' + t.id + '" style="padding:3px 9px">usuń</button></td>';
+      '<td style="text-align:right;white-space:nowrap"><button class="ghost" data-edit="' + t.id + '" style="padding:3px 9px">edytuj</button> <button class="danger" data-del="' + t.id + '" style="padding:3px 9px">usuń</button></td>';
     tr.children[1].innerHTML = cc.name + (auto ? ' <span class="small">(auto)</span>' : "");
     tr.children[2].textContent = (cc.kind === "income" ? "+" : "−") + money(t.amount);
     tr.children[3].textContent = t.note || "";
@@ -392,6 +428,12 @@ async function loadTx() {
         msg("Usunięto", "ok");
         loadTx();
       } catch (e) { msg(e.message, "err"); }
+    };
+  });
+  tb.querySelectorAll("[data-edit]").forEach(b => {
+    b.onclick = () => {
+      const t = s.transactions.find(x => x.id === parseInt(b.dataset.edit, 10));
+      if (t) { setEdit(t); show("dodaj"); }
     };
   });
 }

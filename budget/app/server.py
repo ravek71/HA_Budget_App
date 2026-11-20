@@ -227,6 +227,23 @@ def make_app(data: BudgetData) -> Flask:
             return _err(str(exc))
         return jsonify({"ok": True, "id": tx_id}), 201
 
+    @app.put("/api/transactions/<int:tx_id>")
+    def api_update_transaction(tx_id: int):
+        body = _json_body()
+        key = str(body.get("category") or "").strip()
+        amount = _as_float(body.get("amount"), None)
+        if amount is None or amount <= 0:
+            return _err("amount musi być liczbą większą od zera")
+        date_str = str(body.get("date") or "").strip()
+        if len(date_str) != 10:
+            return _err("date w formacie YYYY-MM-DD")
+        note = str(body.get("note") or "").strip()
+        try:
+            tx = data.update_transaction(tx_id, key, amount, date_str, note)
+        except ValueError as exc:
+            return _err(str(exc))
+        return jsonify({"ok": True, "transaction": tx})
+
     @app.delete("/api/transactions/<int:tx_id>")
     def api_delete_transaction(tx_id: int):
         if not data.delete_transaction(tx_id):

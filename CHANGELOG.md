@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.3 (2026-11-20)
+
+- Historia: edycja transakcji (nie tylko usuwanie). Przycisk „edytuj"
+  otwiera formularz (zakładka Dodaj) z podpiętymi danymi — można zmienić
+  kategorię, kwotę, datę i notatkę; „Anuluj" wraca do historii.
+  Nowy endpoint `PUT /api/transactions/<id>` + `update_transaction`
+  w warstwie danych (walidacja kategorii/kwoty/daty, id się nie zmienia).
+
 ## 0.1.2 (2026-11-20)
 
 - Fix (poprawka 0.1.1): wywołania API panelu są teraz **względne do

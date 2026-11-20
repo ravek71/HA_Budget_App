@@ -216,6 +216,39 @@ class BudgetData:
             (d, category_key, amount, (note or "").strip()),
         )
 
+    def update_transaction(
+        self,
+        tx_id: int,
+        category_key: str,
+        amount: float,
+        date_str: str,
+        note: str,
+    ) -> dict[str, Any]:
+        """Update all editable fields of one transaction (id kept)."""
+        if self.get_category(category_key) is None:
+            raise ValueError(f"Brak kategorii: {category_key!r}")
+        amount = round(float(amount), 2)
+        if amount <= 0:
+            raise ValueError("Kwota musi być większa od zera")
+        d = (date_str or "").strip()
+        if not d:
+            raise ValueError("Podaj datę (YYYY-MM-DD)")
+        date.fromisoformat(d)  # validates YYYY-MM-DD
+        with self._lock:
+            if self._conn is None:
+                self.open()
+            cur = self._conn.execute(
+                "UPDATE transactions"
+                " SET date = ?, category_key = ?, amount = ?, note = ?"
+                " WHERE id = ?",
+                (d, category_key, amount, (note or "").strip(), int(tx_id)),
+            )
+            self._conn.commit()
+            if cur.rowcount == 0:
+                raise ValueError(f"Brak transakcji o id {tx_id}")
+        rows = self._query("SELECT * FROM transactions WHERE id = ?", (int(tx_id),))
+        return dict(rows[0]) if rows else {}
+
     def delete_transaction(self, tx_id: int) -> bool:
         """Delete one transaction by id; returns True if a row was removed."""
         with self._lock:

@@ -1,9 +1,12 @@
 # Status — HA_Budget_App (app add-on „Budżet domowy")
 
-Stan na: 2026-11-20. Wersja: **0.1.2** (na dysku; na serwie usera działa
-0.1.1 — panel renderuje się, API 404, bo fetch absolutne). Fix zweryfikowany
-na żywym ingressie: panel = iframe `/api/hassio_ingress/<token>/`, fetch
-względny z tego iframe → 200 (test: `api/status` zwraca dane).
+Stan na: 2026-11-20. Wersja: **0.1.2 — wdrożona u usera i działa**
+(panel + API przez ingress, potwierdzone przez usera: „Działa").
+Na dysku gotowe **0.1.3**: edycja transakcji w Historii (nie tylko usuwanie).
+Kluczowa lekcja: panel ingress HA żyje w iframe pod
+`/api/hassio_ingress/<token>/` — HA odcina cały ten prefix przed proxy do
+appa, więc JS panela musi dzwonić **ścieżkami względnymi do katalogu
+panelu** (`API_DIR` z `location.pathname`), nigdy absolutnie.
 
 ## Gotowe
 - Add-on `budget/`: `config.yaml` (ingress, port 8099, watchdog `/healthz`,
