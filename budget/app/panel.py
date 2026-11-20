@@ -1,6 +1,6 @@
 """The budget panel — a single static HTML page; all data via /api/*."""
 
-PAGE = """<!doctype html>
+PAGE = r"""<!doctype html>
 <html lang="pl">
 <head>
 <meta charset="utf-8">
@@ -144,6 +144,10 @@ td.num,th.num{text-align:right}
 <script>
 const MIES = ["Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec","Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"];
 const $ = (id) => document.getElementById(id);
+// HA ingress serves this panel under /api/<slug>/ and strips that prefix
+// when proxying to the app — so every API call must stay inside the prefix
+// (absolute /api/... from the site root hits HA core and 404s).
+const API_BASE = (location.pathname.match(/^\/api\/[^\/]+/) || [""])[0];
 let view = "pulpit";
 let catYear = new Date().getFullYear(), catMonth = new Date().getMonth() + 1;
 let histY = catYear, histM = catMonth;

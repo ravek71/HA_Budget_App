@@ -1,6 +1,7 @@
 # Status — HA_Budget_App (app add-on „Budżet domowy")
 
-Stan na: 2026-11-20. Wersja: **0.1.0** (na dysku; GitHub: **do wgrania**).
+Stan na: 2026-11-20. Wersja: **0.1.1** (na dysku; 0.1.0 zainstalowana
+u usera, panel działał ale API zwracało 404 — fix w 0.1.1).
 
 ## Gotowe
 - Add-on `budget/`: `config.yaml` (ingress, port 8099, watchdog `/healthz`,

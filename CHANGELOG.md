@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1 (2026-11-20)
+
+- Fix: panel dzwonił na API ścieżkami absolutnymi (`/api/...`) — przez
+  ingress HA (panel pod `/api/budget/`) takie wywołania trafiały do
+  rdzenia HA i wracały **404**, przez co panel pokazywał puste dane.
+  Teraz wszystkie wywołania zostają wewnątrz prefixu ingress
+  (`/api/budget/api/...` → app `/api/...`).
+
 ## 0.1.0 (2026-11-20)
 
 - Wersja startowa **app add-on** (przeniesienie projektu z formy integracji
