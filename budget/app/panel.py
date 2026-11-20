@@ -144,10 +144,10 @@ td.num,th.num{text-align:right}
 <script>
 const MIES = ["Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec","Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"];
 const $ = (id) => document.getElementById(id);
-// HA ingress serves this panel under /api/<slug>/ and strips that prefix
-// when proxying to the app — so every API call must stay inside the prefix
-// (absolute /api/... from the site root hits HA core and 404s).
-const API_BASE = (location.pathname.match(/^\/api\/[^\/]+/) || [""])[0];
+// HA ingress serves this panel at /api/hassio_ingress/<token>/ and strips
+// that prefix when proxying to the app — so every API call must stay inside
+// the panel's own directory (absolute /api/... hits HA core and 404s).
+const API_DIR = (location.pathname.endsWith("/") ? location.pathname : location.pathname.replace(/[^/]*$/, ""));
 let view = "pulpit";
 let catYear = new Date().getFullYear(), catMonth = new Date().getMonth() + 1;
 let histY = catYear, histM = catMonth;
@@ -157,7 +157,8 @@ function money(x) {
   return (x < 0 ? "-" : "") + Math.abs(x).toFixed(2).replace(".", ",") + " zł";
 }
 async function api(path, opts) {
-  const r = await fetch(path, Object.assign({ headers: { "Content-Type": "application/json" } }, opts));
+  const url = API_DIR + path.replace(/^\//, "");
+  const r = await fetch(url, Object.assign({ headers: { "Content-Type": "application/json" } }, opts));
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || ("błąd " + r.status));
   return j;

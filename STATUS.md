@@ -1,7 +1,9 @@
 # Status — HA_Budget_App (app add-on „Budżet domowy")
 
-Stan na: 2026-11-20. Wersja: **0.1.1** (na dysku; 0.1.0 zainstalowana
-u usera, panel działał ale API zwracało 404 — fix w 0.1.1).
+Stan na: 2026-11-20. Wersja: **0.1.2** (na dysku; na serwie usera działa
+0.1.1 — panel renderuje się, API 404, bo fetch absolutne). Fix zweryfikowany
+na żywym ingressie: panel = iframe `/api/hassio_ingress/<token>/`, fetch
+względny z tego iframe → 200 (test: `api/status` zwraca dane).
 
 ## Gotowe
 - Add-on `budget/`: `config.yaml` (ingress, port 8099, watchdog `/healthz`,
