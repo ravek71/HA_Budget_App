@@ -9,11 +9,12 @@ import logging
 from datetime import date
 from typing import Any, Optional
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 
 from . import __version__
 from .config import settings
 from .data import BudgetData
+from .lidlsync import LidlSync
 from .panel import PAGE
 
 log = logging.getLogger(__name__)
@@ -60,7 +61,7 @@ def _json_body() -> dict:
     return body if isinstance(body, dict) else {}
 
 
-def make_app(data: BudgetData) -> Flask:
+def make_app(data: BudgetData, sync: Optional[LidlSync] = None) -> Flask:
     app = Flask(__name__)
 
     @app.after_request
@@ -248,6 +249,65 @@ def make_app(data: BudgetData) -> Flask:
     def api_delete_transaction(tx_id: int):
         if not data.delete_transaction(tx_id):
             return _err("brak transakcji o tym id", 404)
+        return jsonify({"ok": True})
+
+    # ---------------------------------------------------------------- receipts
+
+    @app.get("/api/receipts")
+    def api_receipts():
+        meta = sync.status() if sync is not None else {
+            "configured": False,
+            "syncing": False,
+            "phase": "",
+            "last_sync": None,
+            "last_new": None,
+            "last_error": None,
+        }
+        meta["receipts"] = data.receipts()
+        meta["count"] = len(meta["receipts"])
+        return jsonify(meta)
+
+    @app.post("/api/receipts/sync")
+    def api_receipts_sync():
+        if sync is None:
+            return _err("synchronizacja Lidl Plus nie jest dostępna")
+        if not sync.configured:
+            return _err(
+                "Ustaw lidl_refresh_token w opcjach add-onu "
+                "(jak go zdobyć: plik tools/get_lidl_token.py w repo — patrz README)."
+            )
+        if not sync.start():
+            return _err("synchronizacja już trwa — poczekaj na koniec", 409)
+        return jsonify({"started": True})
+
+    @app.get("/api/receipts/<ticket_id>/print")
+    def api_receipt_print(ticket_id: str):
+        rec = data.receipt(ticket_id)
+        if rec is None:
+            return _err("brak paragonu o tym id", 404)
+        html = rec.get("html") or ""
+        if not html.strip():
+            return Response(
+                "<html><body><p>Brak treści paragonu w bazie (pusty html).</p>"
+                "</body></html>",
+                mimetype="text/html",
+            )
+        if "<html" not in html.lower():
+            # older receipts may come as a fragment — wrap for printing
+            html = (
+                "<!doctype html><html><head><meta charset='utf-8'>"
+                "<style>body{font-family:monospace,'Courier New',monospace;"
+                "max-width:420px;margin:16px auto;font-size:13px}"
+                "@media print{body{margin:0}}</style></head><body>"
+                + html
+                + "</body></html>"
+            )
+        return Response(html, mimetype="text/html")
+
+    @app.delete("/api/receipts/<ticket_id>")
+    def api_receipt_delete(ticket_id: str):
+        if not data.delete_receipt(ticket_id):
+            return _err("brak paragonu o tym id", 404)
         return jsonify({"ok": True})
 
     # ---------------------------------------------------------------- settings

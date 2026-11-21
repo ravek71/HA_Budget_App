@@ -61,5 +61,19 @@ class Settings:
         # SQLite database lives in the app's /data volume (survives updates)
         self.db_path = _pick(options, "db_path", "DB_PATH", DATA_FILE, str)
 
+        # Lidl Plus receipts (unofficial API). The refresh token is the only
+        # credential: the interactive browser login happens once, outside HA
+        # (tools/get_lidl_token.py in the repo). After each sync the rotated
+        # token is persisted in the DB; the option is a fallback/re-entry.
+        self.lidl_refresh_token = str(
+            _pick(options, "lidl_refresh_token", "LIDL_REFRESH_TOKEN", "", str)
+        ).strip()
+        self.lidl_country = str(
+            _pick(options, "lidl_country", "LIDL_COUNTRY", "PL", str)
+        ).strip().upper() or "PL"
+        self.lidl_language = str(
+            _pick(options, "lidl_language", "LIDL_LANGUAGE", "pl", str)
+        ).strip().lower() or "pl"
+
 
 settings = Settings()

@@ -59,6 +59,7 @@ td.num,th.num{text-align:right}
   <button class="tab" data-view="dodaj">Dodaj</button>
   <button class="tab" data-view="kategorie">Kategorie</button>
   <button class="tab" data-view="historia">Historia</button>
+  <button class="tab" data-view="paragony">Paragony</button>
 </header>
 <main>
   <div id="msg"></div>
@@ -143,6 +144,20 @@ td.num,th.num{text-align:right}
       <table id="ttx"><thead><tr><th>Data</th><th>Kategoria</th><th class="num">Kwota</th><th>Notatka</th><th></th></tr></thead><tbody></tbody></table>
     </div>
   </section>
+
+  <section id="view-paragony" class="hidden">
+    <div class="card">
+      <b>Paragony Lidl Plus</b>
+      <div id="r-meta" class="small" style="margin:8px 0 4px">Ładowanie...</div>
+      <div class="row" style="margin-top:8px">
+        <button id="r-sync">Synchronizuj z Lidl Plus</button>
+      </div>
+      <p class="small" style="margin:10px 0 0">Przy pierwszym razie: ustaw <code>lidl_refresh_token</code> w opcjach add-onu (jak go zdobyć: plik <code>tools/get_lidl_token.py</code> w repo — patrz README). Paragon otwiera się w nowej karcie — tam „Drukuj → Zapisz jako PDF”. Usunięcie paragonu kasuje tylko kopię lokalną (w Lidl Plus zostaje).</p>
+    </div>
+    <div class="card">
+      <table id="rtab"><thead><tr><th>Data</th><th>Sklep</th><th class="num">Pozycje</th><th class="num">Kwota</th><th></th></tr></thead><tbody></tbody></table>
+    </div>
+  </section>
 </main>
 <script>
 const MIES = ["Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec","Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"];
@@ -184,11 +199,12 @@ function msg(text, cls) {
 function show(v) {
   view = v;
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.view === v));
-  ["pulpit", "dodaj", "kategorie", "historia"].forEach(x => $("view-" + x).classList.toggle("hidden", x !== v));
+  ["pulpit", "dodaj", "kategorie", "historia", "paragony"].forEach(x => $("view-" + x).classList.toggle("hidden", x !== v));
   if (v === "pulpit") loadPulpit();
   else if (v === "dodaj") loadAdd();
   else if (v === "kategorie") loadCats();
   else if (v === "historia") loadHist();
+  else if (v === "paragony") loadReceipts();
 }
 document.querySelectorAll(".tab").forEach(t => { t.onclick = () => { if (t.dataset.view === "dodaj") setEdit(null); show(t.dataset.view); }; });
 
@@ -440,6 +456,61 @@ async function loadTx() {
 
 $("ht-prev").onclick = () => { histM--; if (histM < 1) { histM = 12; histY--; } loadTx(); };
 $("ht-next").onclick = () => { histM++; if (histM > 12) { histM = 1; histY++; } loadTx(); };
+
+let rTimer = null;
+async function loadReceipts() {
+  clearTimeout(rTimer);
+  rTimer = null;
+  let r;
+  try {
+    r = await api("/api/receipts");
+  } catch (e) { msg(e.message, "err"); return; }
+  const meta = $("r-meta");
+  if (!r.configured) meta.textContent = "Nie skonfigurowano — ustaw lidl_refresh_token w opcjach add-onu (patrz README → Paragony Lidl Plus).";
+  else if (r.syncing) meta.textContent = "Synchronizacja: " + (r.phase || "w trakcie") + " ...";
+  else meta.textContent =
+    (r.last_sync ? "Ostatnia synchronizacja: " + r.last_sync + " (nowych paragonów: " + (r.last_new ?? "?") + ")" : "Jeszcze nie synchronizowano") +
+    (r.last_error ? " · Błąd: " + r.last_error : "");
+  const tb = $("rtab").querySelector("tbody");
+  tb.innerHTML = "";
+  if (!r.receipts.length) {
+    tb.innerHTML = '<tr><td colspan="5" class="small">Brak paragonów w lokalnej bazie — kliknij „Synchronizuj z Lidl Plus”.</td></tr>';
+    return;
+  }
+  r.receipts.forEach(x => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = '<td></td><td></td><td class="num"></td><td class="num neg"></td><td style="text-align:right;white-space:nowrap"></td>';
+    tr.children[0].textContent = x.date;
+    tr.children[1].textContent = x.store || "";
+    tr.children[2].textContent = x.articles ? String(x.articles) : "";
+    tr.children[3].textContent = "−" + money(x.total);
+    tr.children[4].innerHTML =
+      '<button class="ghost" data-rv="' + x.id + '" style="padding:3px 9px">pokaż</button> ' +
+      '<button class="danger" data-rd="' + x.id + '" style="padding:3px 9px">usuń</button>';
+    tb.appendChild(tr);
+  });
+  tb.querySelectorAll("[data-rv]").forEach(b => {
+    b.onclick = () => window.open(API_DIR + "api/receipts/" + b.dataset.rv + "/print", "_blank");
+  });
+  tb.querySelectorAll("[data-rd]").forEach(b => {
+    b.onclick = async () => {
+      if (!confirm("Usunąć paragon z lokalnej bazy? (w Lidl Plus zostaje)")) return;
+      try {
+        await api("/api/receipts/" + b.dataset.rd, { method: "DELETE" });
+        msg("Usunięto", "ok"); loadReceipts();
+      } catch (e) { msg(e.message, "err"); }
+    };
+  });
+  if (r.syncing) rTimer = setTimeout(loadReceipts, 3000);
+}
+
+$("r-sync").onclick = async () => {
+  try {
+    await api("/api/receipts/sync", { method: "POST" });
+    msg("Synchronizacja rozpoczęta — status poniżej", "ok");
+    loadReceipts();
+  } catch (e) { msg(e.message, "err"); }
+};
 
 show("pulpit");
 </script>

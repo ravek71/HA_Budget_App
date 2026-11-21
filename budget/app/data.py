@@ -11,7 +11,10 @@ categories:    key (slug), name, kind ('income' | 'expense'),
                category, 0 = no planned budget)
 transactions:  date (YYYY-MM-DD), category_key, amount (> 0, direction
                comes from the category kind), note
-settings:      key/value (currently: total_budget)
+settings:      key/value (currently: total_budget, lidl_refresh_token)
+receipts:      Lidl Plus receipts synced from the unofficial API — id
+                (ticket id), date, store, total, articles, html
+                (htmlPrintedReceipt), raw (full detail JSON), synced_at
 """
 
 from __future__ import annotations
@@ -20,7 +23,7 @@ import logging
 import re
 import sqlite3
 import threading
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -78,6 +81,19 @@ class BudgetData:
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS receipts (
+                    id TEXT PRIMARY KEY,
+                    date TEXT NOT NULL,
+                    datetime TEXT NOT NULL DEFAULT '',
+                    store TEXT NOT NULL DEFAULT '',
+                    total REAL NOT NULL DEFAULT 0,
+                    articles INTEGER NOT NULL DEFAULT 0,
+                    html TEXT NOT NULL DEFAULT '',
+                    raw TEXT NOT NULL DEFAULT '',
+                    synced_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_receipts_date
+                    ON receipts(date);
                 """
             )
             self._conn.commit()
@@ -273,6 +289,70 @@ class BudgetData:
         rows = self._query(sql, tuple(params))
         return [dict(r) for r in rows]
 
+    # -------------------------------------------------------------- receipts
+
+    def upsert_receipt(
+        self,
+        receipt_id: str,
+        date_str: str,
+        store: str,
+        total: float,
+        articles: int,
+        html: str,
+        raw: str,
+        datetime_str: str = "",
+    ) -> None:
+        """Insert or replace one synced receipt (by ticket id)."""
+        self._execute(
+            "INSERT INTO receipts (id, date, datetime, store, total, articles,"
+            " html, raw, synced_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            " ON CONFLICT(id) DO UPDATE SET"
+            " date = excluded.date, datetime = excluded.datetime,"
+            " store = excluded.store, total = excluded.total,"
+            " articles = excluded.articles, html = excluded.html,"
+            " raw = excluded.raw, synced_at = excluded.synced_at",
+            (
+                str(receipt_id),
+                (date_str or "")[:10] or datetime.now().strftime("%Y-%m-%d"),
+                datetime_str or "",
+                (store or "").strip(),
+                round(float(total or 0), 2),
+                int(articles or 0),
+                html or "",
+                raw or "",
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            ),
+        )
+
+    def receipts(self) -> list[dict[str, Any]]:
+        """List rows without the heavy html/raw columns (panel table)."""
+        rows = self._query(
+            "SELECT id, date, store, total, articles, synced_at"
+            " FROM receipts ORDER BY datetime DESC, id DESC"
+        )
+        return [dict(r) for r in rows]
+
+    def receipt(self, receipt_id: str) -> Optional[dict[str, Any]]:
+        rows = self._query(
+            "SELECT * FROM receipts WHERE id = ?", (str(receipt_id),)
+        )
+        return dict(rows[0]) if rows else None
+
+    def receipt_ids(self) -> set[str]:
+        rows = self._query("SELECT id FROM receipts")
+        return {r["id"] for r in rows}
+
+    def delete_receipt(self, receipt_id: str) -> bool:
+        with self._lock:
+            if self._conn is None:
+                self.open()
+            cur = self._conn.execute(
+                "DELETE FROM receipts WHERE id = ?", (str(receipt_id),)
+            )
+            self._conn.commit()
+            return cur.rowcount > 0
+
     # ------------------------------------------------------------- budgets
 
     def get_total_budget(self) -> float:
@@ -280,6 +360,17 @@ class BudgetData:
             "SELECT value FROM settings WHERE key = 'total_budget'"
         )
         return float(rows[0]["value"]) if rows else 0.0
+
+    def get_setting(self, key: str) -> Optional[str]:
+        rows = self._query("SELECT value FROM settings WHERE key = ?", (key,))
+        return rows[0]["value"] if rows else None
+
+    def set_setting(self, key: str, value: str) -> None:
+        self._execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?)"
+            " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, str(value)),
+        )
 
     def set_total_budget(self, value: float) -> float:
         value = round(float(value), 2)

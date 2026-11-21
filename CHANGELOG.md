@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.0 (2026-11-21)
+
+- **Paragony Lidl Plus**: nowa zakładka „Paragony” w panelu. Synchronizacja
+  (w tle, z listy do szczegółów) z nieoficjalnego API aplikacji Lidl Plus —
+  paragony trafiają do nowej tabeli `receipts` w bazie SQLite (data, sklep,
+  kwota, pozycje, HTML paragonu, surowy JSON). Przeglądanie, otwarcie
+  paragonu w nowej karcie (Drukuj → Zapisz jako PDF) i usuwanie kopii lokalnej.
+- Autoryzacja: jednorazowy login w przeglądarce (skrypt
+  `tools/get_lidl_token.py` — czysty Python, bez pakietów) → refresh token
+  wklejany do opcji add-onu `lidl_refresh_token`. Add-on sam odświeża access
+  token i przechowuje **rotowany** refresh token w bazie (odporna na
+  restarty; opcja = zapas/ponowne wejście).
+- Opcje add-onu: `lidl_refresh_token`, `lidl_country` (domyślnie PL),
+  `lidl_language` (domyślnie pl).
+- Nowe moduły: `app/lidl.py` (klient API, stdlib), `app/lidlsync.py`
+  (synchronizacja w tle, retry 401/429); endpoints `GET/POST /api/receipts`,
+  `GET /api/receipts/<id>/print`, `DELETE /api/receipts/<id>`.
+
 ## 0.1.3 (2026-11-20)
 
 - Historia: edycja transakcji (nie tylko usuwanie). Przycisk „edytuj"

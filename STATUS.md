@@ -1,8 +1,11 @@
 # Status — HA_Budget_App (app add-on „Budżet domowy")
 
-Stan na: 2026-11-20. Wersja: **0.1.2 — wdrożona u usera i działa**
-(panel + API przez ingress, potwierdzone przez usera: „Działa").
-Na dysku gotowe **0.1.3**: edycja transakcji w Historii (nie tylko usuwanie).
+Stan na: 2026-11-21. U usera działa **0.1.2** (potwierdzone: „Działa");
+na dysku gotowe **0.2.0** (testy zielone): **Paragony Lidl Plus** —
+nowa tabela `receipts`, zakładka „Paragony”, sync w tle z nieoficjalnego
+API (`app/lidl.py`, `app/lidlsync.py`), opcje `lidl_refresh_token` /
+`lidl_country` / `lidl_language`, skrypt `tools/get_lidl_token.py`
+(jednorazowy login w przeglądarce → token do opcji).
 Kluczowa lekcja: panel ingress HA żyje w iframe pod
 `/api/hassio_ingress/<token>/` — HA odcina cały ten prefix przed proxy do
 appa, więc JS panela musi dzwonić **ścieżkami względnymi do katalogu

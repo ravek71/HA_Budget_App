@@ -9,6 +9,7 @@ from datetime import datetime
 
 from .config import settings
 from .data import BudgetData
+from .lidlsync import LidlSync
 from .server import make_app
 
 log = logging.getLogger("budget")
@@ -55,7 +56,14 @@ def main() -> None:
 
     threading.Thread(target=rollover_loop, name="recurring", daemon=True).start()
 
-    app = make_app(data)
+    sync = LidlSync(data, settings)
+    if not sync.configured:
+        log.info(
+            "Lidl Plus: brak lidl_refresh_token (opcje add-onu) — "
+            "paragony dostępne po ustawieniu tokena"
+        )
+
+    app = make_app(data, sync=sync)
     log.info("HTTP API listening on 0.0.0.0:%d", settings.port)
     app.run(host="0.0.0.0", port=settings.port, threaded=True, use_reloader=False)
 

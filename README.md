@@ -20,7 +20,10 @@ Bez zewnętrznych zależności — tylko standardowa biblioteka Pythona
 - **Kategorie** — typ (wpływ/wydatek), budżet miesięczny, flaga „stała"
   (auto 1. dnia miesiąca), przycisk „Zaksięguj stałe (teraz)", usuwanie,
 - **Historia** — seria 12 miesięcy + transakcje wybranego miesiąca
-  (z usuwaniem pojedynczych wpisów).
+  (edycja i usuwanie pojedynczych wpisów),
+- **Paragony** — paragony **Lidl Plus** synchronizowane z konta (nowa
+  tabela w bazie): lista, otwarcie paragonu w nowej karcie
+  (Drukuj → Zapisz jako PDF), usuwanie kopii lokalnej.
 
 ## Instalacja
 
@@ -61,6 +64,30 @@ zabrakło (HA wyłączony 1. dnia), użyj przycisku **Zaksięguj stałe
 (teraz)** w zakładce Kategorie. Automatyczne księgowanie można wyłączyć
 w opcjach add-onu (`auto_recurring`).
 
+### Paragony Lidl Plus
+
+Funkcja korzysta z **nieoficjalnego** API aplikacji Lidl Plus
+(reverse engineered przez społeczność; Lidl może je zmienić lub
+zablokować). Dotyczy wyłącznie danych Twojego własnego konta.
+
+1. **Jednorazowo na PC** (Python 3.8+, bez pakietów):
+   `python tools\get_lidl_token.py` — otwiera przeglądarkę, logujesz się
+   do Lidl Plus normalnie; po przekierowaniu przeglądarka pokaże błąd
+   `com.lidlplus.app://callback?code=...` — **skopiuj ten adres** z paska
+   i wklej w konsoli. Skrypt wypisze **refresh token**.
+2. **Opcje add-onu** („Budżet domowy” → Konfiguracja): wklej token do
+   `lidl_refresh_token` (domyślnie `lidl_country: PL`, `lidl_language: pl`
+   — zmień tylko przy innym kraju). Zapisz/odśwież add-on.
+3. **Panel → Paragony → „Synchronizuj z Lidl Plus”** — synchronizacja
+   działa w tle (status widać w karcie; panel odświeża się sam).
+4. Paragon: **pokaż** → nowa karta z paragonem → „Drukuj → Zapisz jako
+   PDF”. **Usuń** kasuje tylko kopię lokalną.
+
+Tokeny: access token żyje ~20 min — add-on sam go odświeża. Refresh token
+**rotuje** (Lidl zwraca nową wersję przy każdym odświeżeniu) — add-on
+przechowuje aktualną wersję w swojej bazie od pierwszej synchronizacji;
+opcja służy jako wejście/rezerwa. Token traktuj jak hasło.
+
 ## API (REST)
 
 Panel komunikuje się z add-onem przez REST (przydatne do własnych
@@ -79,6 +106,10 @@ automatów przez webhook/REST call):
 | DELETE | `/api/transactions/<id>` | usunięcie transakcji |
 | PUT | `/api/total_budget` | `{"amount"}` — budżet miesięczny (plan) |
 | POST | `/api/recurring` | zaksięguj stałe bieżącego miesiąca teraz |
+| GET | `/api/receipts` | paragony (bez HTML) + status synchronizacji |
+| POST | `/api/receipts/sync` | start synchronizacji z Lidl Plus (w tle) |
+| GET | `/api/receipts/<id>/print` | HTML paragonu (do druku/PDF w przeglądarce) |
+| DELETE | `/api/receipts/<id>` | usunięcie kopii lokalnej paragonu |
 | GET | `/healthz` | status + wersja |
 
 ## Dane
