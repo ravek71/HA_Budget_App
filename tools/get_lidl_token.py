@@ -7,14 +7,22 @@ instalacji):
     python tools\get_lidl_token.py PL pl    # kraj ISO-2 + język
 
 Co się dzieje:
-  1. Otwiera się przeglądarka — zaloguj się do Lidl Plus normalnie
-     (email/telefon + hasło; captcha/2FA jeśli Lidl poprosi).
+  1. Otwiera się przeglądarka — strona logowania Lidl może ładować się
+     DOSYĆ POWOLNIE (normalne; sieci z inspekcją TLS/proxy spowalniają).
+     Zaloguj się do Lidl Plus normalnie (email/telefon + hasło). Jeśli
+     pojawi się captcha („Przekroczyliśmy nasze możliwości”) — rozwiąż ją;
+     Lidl stosuje ochronę botów i czasem prosi o ponowną próbę.
   2. Po zalogowaniu przeglądarka spróbuje otworzyć adres
      com.lidlplus.app://callback?code=... i pokaże błąd
      („nie znaleziono aplikacji” / „nie można otworzyć”) — TO JEST
-     PRAWIDŁOWE. Skopiuj pełny adres z paska adresu (zaczyna się od
-     com.lidlplus.app://callback) i wklej go w konsoli.
-  3. Skrypt wyśle kod do Lidl i wypisze refresh token.
+     PRAWIDŁOWE, kod jest już tam.
+  3. Skopiuj pełny adres:
+     a) jeśli w pasku adresu jest com.lidlplus.app://callback?code=... —
+        skopiuj go całość i wklej w konsoli; LUB
+     b) jeśli strona się „zawiesza” (spinner) i pasek się nie zmienił:
+        F12 → zakładka Sieć (Network) → znajdź czerwony/zablokowany
+        request „callback” → prawy przycisk → Kopiuj → Kopiuj adres URL.
+  4. Skrypt wyśle kod do Lidl i wypisze refresh token.
 
 Wklej token do opcji add-onu „Budżet domowy” → lidl_refresh_token.
 
@@ -76,8 +84,11 @@ def main() -> None:
     url = AUTHORIZE_URL + "?" + urllib.parse.urlencode(params)
 
     print("Otwieram przeglądarkę — zaloguj się do Lidl Plus normalnie...")
-    print("(captcha/2FA jeśli poproszą; po zalogowaniu zobaczysz błąd\n"
-          "„nie można otworzyć com.lidlplus.app” — skopiuj ten adres)\n")
+    print("(strona może ładować się wolno; captcha jeśli poproszą)\n"
+          "Po zalogowaniu: skopiuj adres com.lidlplus.app://callback?code=...\n"
+          "z paska (strona pokaże błąd — to normalne). Jeśli pasek się nie\n"
+          "zmienił: F12 → Sieć → czerwony request „callback” → Prawy →\n"
+          "Kopiuj → Kopiuj adres URL.\n")
     webbrowser.open(url)
 
     raw = (
@@ -120,8 +131,30 @@ def main() -> None:
         },
     )
     print("Wymieniam kod na token...")
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        body = json.loads(resp.read())
+    body = None
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            body = json.loads(resp.read())
+    except urllib.error.URLError as exc:
+        reason = str(exc.reason) if hasattr(exc, "reason") else str(exc)
+        if "CERTIFICATE_VERIFY_FAILED" in reason or "certificate" in reason.lower():
+            print(
+                "\nUWAGA: Twoja sieć inspekcjonuje TLS (self-signed cert w łańcuchu —\n"
+                "proxy/antywirus). Ponawiam bez weryfikacji certyfikatu — docelowy\n"
+                "adres jest stały (accounts.lidl.com), a Twoja przeglądarka i tak\n"
+                "przechodzi przez tę samą inspekcję.",
+                file=sys.stderr,
+            )
+            import ssl
+
+            ctx = ssl._create_unverified_context()
+            with urllib.request.urlopen(req, timeout=30, context=ctx) as resp:
+                body = json.loads(resp.read())
+        else:
+            raise
+    if body is None:
+        print("Błąd — brak odpowiedzi tokenowej", file=sys.stderr)
+        sys.exit(1)
 
     refresh_token = body.get("refresh_token")
     if not refresh_token:

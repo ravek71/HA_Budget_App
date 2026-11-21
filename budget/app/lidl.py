@@ -127,8 +127,21 @@ def list_tickets(
 ) -> list[dict]:
     url = f"{TICKETS_BASE}/v2/{country}/tickets?skip={skip}&take={take}"
     result = _http("GET", url, headers=_app_headers(access_token, language))
+    if isinstance(result, dict):
+        # some regions/versions wrap the list in an object — accept the
+        # common wrapper keys, fail with a body preview otherwise
+        for key in ("tickets", "items", "data", "result", "content"):
+            if isinstance(result.get(key), list):
+                return result[key]
+        raise LidlError(
+            "Lidl: nieoczekiwany format listy paragonów: "
+            + json.dumps(result, ensure_ascii=False)[:300]
+        )
     if not isinstance(result, list):
-        raise LidlError("Lidl: nieoczekiwany format listy paragonów")
+        raise LidlError(
+            "Lidl: nieoczekiwany format listy paragonów: "
+            + str(result)[:300]
+        )
     return result
 
 

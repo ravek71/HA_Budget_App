@@ -6,6 +6,15 @@ nowa tabela `receipts`, zakładka „Paragony”, sync w tle z nieoficjalnego
 API (`app/lidl.py`, `app/lidlsync.py`), opcje `lidl_refresh_token` /
 `lidl_country` / `lidl_language`, skrypt `tools/get_lidl_token.py`
 (jednorazowy login w przeglądarce → token do opcji).
+
+Zweryfikowane na żywo (2026-11-21, od maszyny usera):
+- URL autoryzacyjny (`/connect/authorize` + PKCE, Country=PL, language=pl-PL)
+  jest AKCEPTOWANY: `302 → accounts.lidl.com/Account/Login?ReturnUrl=...`
+  (to „ospała strona logowania" — ładowanie wolne, bo sieć usera
+  inspekcjonuje TLS — self-signed cert w łańcuchu; przeglądarka przechodzi,
+  urllib nie).
+- Skrypt ma już fallback SSL (bez weryfikacji certyfikatu, ostrzeżenie
+  na stderr) + instrukcję DevTools (F12 → Sieć → request „callback”).
 Kluczowa lekcja: panel ingress HA żyje w iframe pod
 `/api/hassio_ingress/<token>/` — HA odcina cały ten prefix przed proxy do
 appa, więc JS panela musi dzwonić **ścieżkami względnymi do katalogu
