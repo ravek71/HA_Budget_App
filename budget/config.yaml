@@ -1,10 +1,11 @@
 name: "Budżet domowy"
-version: "0.2.1"
+version: "0.3.0"
 slug: "budget"
 description: >-
   Planowanie i śledzenie domowego budżetu: wpływy, wydatki, wydatki stałe
   (automatyczne co miesiąc), kategorie z planowanymi budżetami, wykresy
-  miesiąca, pełna historia i paragony Lidl Plus (synchronizacja z konta).
+  miesiąca, pełna historia i paragony Lidl Plus (wiele kont, wspólne
+  zestawienie, auto-księgowanie paragonów jako wydatków).
   Dane zapisywane lokalnie (SQLite), panel w Home Assistant przez ingress.
 url: "https://github.com/ravek71/HA_Budget_App"
 arch:

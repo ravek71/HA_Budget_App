@@ -5,3 +5,12 @@ configuration:
   auto_recurring:
     name: "Automatyczne wydatki stałe"
     description: "Księguj wydatki stałe (kategorie oznaczone „stała” z budżetem) automatycznie 1. dnia miesiąca."
+  lidl_refresh_token:
+    name: "Lidl Plus — refresh token (legacy)"
+    description: "Tylko do wstecznej kompatybilności (0.2.x): token zostanie zmigrowany do pierwszego konta w zakładce „Lidl - paragony”. Konta dodawaj już w panelu."
+  lidl_country:
+    name: "Lidl Plus — kraj"
+    description: "Kod kraju konta Lidl Plus (domyślnie PL)."
+  lidl_language:
+    name: "Lidl Plus — język"
+    description: "Kod języka API Lidl Plus (domyślnie pl)."

@@ -59,7 +59,7 @@ td.num,th.num{text-align:right}
   <button class="tab" data-view="dodaj">Dodaj</button>
   <button class="tab" data-view="kategorie">Kategorie</button>
   <button class="tab" data-view="historia">Historia</button>
-  <button class="tab" data-view="paragony">Paragony</button>
+  <button class="tab" data-view="paragony">Lidl - paragony</button>
 </header>
 <main>
   <div id="msg"></div>
@@ -147,15 +147,33 @@ td.num,th.num{text-align:right}
 
   <section id="view-paragony" class="hidden">
     <div class="card">
-      <b>Paragony Lidl Plus</b>
-      <div id="r-meta" class="small" style="margin:8px 0 4px">Ładowanie...</div>
+      <b>Konta Lidl Plus</b>
+      <div id="r-accounts" style="margin-top:10px"></div>
+      <div class="row" style="margin-top:12px;align-items:flex-end">
+        <div style="width:110px"><label>Id konta</label><input id="la-id" type="text" placeholder="np. konto2"></div>
+        <div class="f"><label>Nazwa</label><input id="la-name" type="text" placeholder="np. Konto żony"></div>
+        <div class="f" style="min-width:220px"><label>Refresh token</label><input id="la-token" type="password" placeholder="z tools/get_lidl_token.py"></div>
+        <button id="la-add">Dodaj konto</button>
+      </div>
+      <p class="small" style="margin:10px 0 0">Token: na PC <code>python tools\get_lidl_token.py</code> → zaloguj się w przeglądarce → wklej adres <code>com.lidlplus.app://callback?code=...</code> → skrypt wypisze token. Każde konto = osobny login Lidl Plus. Zestawienie paragonów jest wspólne (poniżej).</p>
+    </div>
+    <div class="card">
+      <b>Ustawienia paragonów</b>
+      <div class="row" style="margin-top:10px">
+        <label class="small" style="display:flex;align-items:center;gap:6px"><input id="r-autobook" type="checkbox"> auto-księgowanie paragonów jako wydatków</label>
+        <div class="f"><label>Kategoria do paragonów</label><select id="r-autocat"></select></div>
+        <button id="r-autosave" class="ghost" style="padding:5px 12px">Zapisz</button>
+      </div>
+      <p class="small" style="margin:8px 0 0">Auto-księgowanie: każdy NOWY paragon po synchronizacji zapisuje transakcję wydatku (kategoria z listy; „(auto-detekcja)” = kategoria wydatku z „Lidl” w nazwie). Wyczyść, aby nie księgować.</p>
+      <div id="r-meta" class="small" style="margin-top:10px">Ładowanie...</div>
       <div class="row" style="margin-top:8px">
         <button id="r-sync">Synchronizuj z Lidl Plus</button>
       </div>
-      <p class="small" style="margin:10px 0 0">Przy pierwszym razie: ustaw <code>lidl_refresh_token</code> w opcjach add-onu (jak go zdobyć: plik <code>tools/get_lidl_token.py</code> w repo — patrz README). Paragon otwiera się w nowej karcie — tam „Drukuj → Zapisz jako PDF”. Usunięcie paragonu kasuje tylko kopię lokalną (w Lidl Plus zostaje).</p>
     </div>
     <div class="card">
-      <table id="rtab"><thead><tr><th>Data</th><th>Sklep</th><th class="num">Pozycje</th><th class="num">Kwota</th><th></th></tr></thead><tbody></tbody></table>
+      <b>Paragony</b>
+      <table id="rtab"><thead><tr><th>Data</th><th>Konto</th><th>Sklep</th><th class="num">Pozycje</th><th class="num">Kwota</th><th></th></tr></thead><tbody></tbody></table>
+      <p class="small" style="margin:10px 0 0">Paragon otwiera się w nowej karcie — tam „Drukuj → Zapisz jako PDF”. „Zaksięguj” tworzy transakcję wydatku (data/kwota z paragonu); „Odblokuj” ją usuwa. Usunięcie paragonu kasuje tylko kopię lokalną (w Lidl Plus zostaje; transakcja zostaje).</p>
     </div>
   </section>
 </main>
@@ -458,6 +476,7 @@ $("ht-prev").onclick = () => { histM--; if (histM < 1) { histM = 12; histY--; } 
 $("ht-next").onclick = () => { histM++; if (histM > 12) { histM = 1; histY++; } loadTx(); };
 
 let rTimer = null;
+let rAccounts = [];
 async function loadReceipts() {
   clearTimeout(rTimer);
   rTimer = null;
@@ -465,36 +484,117 @@ async function loadReceipts() {
   try {
     r = await api("/api/receipts");
   } catch (e) { msg(e.message, "err"); return; }
+  rAccounts = r.accounts || [];
+  const acctName = (id) => {
+    const a = rAccounts.find(x => x.id === id);
+    return a ? a.name : id;
+  };
+  // accounts
+  const al = $("r-accounts");
+  al.innerHTML = "";
+  if (!rAccounts.length) al.innerHTML = '<p class="small">Brak kont — dodaj pierwsze poniżej (token: tools/get_lidl_token.py).</p>';
+  rAccounts.forEach(a => {
+    const d = document.createElement("div");
+    d.className = "row";
+    d.style.margin = "6px 0";
+    d.innerHTML =
+      '<b style="min-width:160px"></b>' +
+      '<input data-lt="' + a.id + '" type="password" placeholder="zmień token (opcjonalnie)" style="padding:5px 8px">' +
+      '<button class="ghost" data-ls="' + a.id + '" style="padding:5px 10px">Zapisz</button>' +
+      '<button class="danger" data-ld="' + a.id + '" style="padding:5px 10px">Usuń</button>';
+    d.children[0].textContent = a.name + " (" + a.id + ")";
+    al.appendChild(d);
+  });
+  al.querySelectorAll("[data-ls]").forEach(b => {
+    b.onclick = async () => {
+      const id = b.dataset.ls;
+      const tok = al.querySelector('[data-lt="' + id + '"]').value.trim();
+      try {
+        if (tok) await api("/api/lidl/accounts/" + id, { method: "PUT", body: JSON.stringify({ token: tok }) });
+        msg("Zapisano konto", "ok"); loadReceipts();
+      } catch (e) { msg(e.message, "err"); }
+    };
+  });
+  al.querySelectorAll("[data-ld]").forEach(b => {
+    b.onclick = async () => {
+      if (!confirm("Usunąć konto? (paragony już pobrane zostają w bazie)")) return;
+      try {
+        await api("/api/lidl/accounts/" + b.dataset.ld, { method: "DELETE" });
+        msg("Usunięto konto", "ok"); loadReceipts();
+      } catch (e) { msg(e.message, "err"); }
+    };
+  });
+  // auto-book settings
+  const catsR = await api("/api/categories");
+  $("r-autobook").checked = !!r.auto_book;
+  const sel = $("r-autocat");
+  sel.innerHTML = "";
+  const o0 = document.createElement("option");
+  o0.value = ""; o0.textContent = "(auto-detekcja: kategoria wydatku z „Lidl” w nazwie)";
+  sel.appendChild(o0);
+  catsR.categories.filter(c => c.kind === "expense").forEach(c => {
+    const o = document.createElement("option");
+    o.value = c.key; o.textContent = c.name;
+    sel.appendChild(o);
+  });
+  sel.value = r.auto_category || "";
+  // sync status
   const meta = $("r-meta");
-  if (!r.configured) meta.textContent = "Nie skonfigurowano — ustaw lidl_refresh_token w opcjach add-onu (patrz README → Paragony Lidl Plus).";
+  if (!r.configured) meta.textContent = "Nie skonfigurowano — dodaj konto Lidl Plus powyżej (token z tools/get_lidl_token.py).";
   else if (r.syncing) meta.textContent = "Synchronizacja: " + (r.phase || "w trakcie") + " ...";
   else meta.textContent =
     (r.last_sync ? "Ostatnia synchronizacja: " + r.last_sync + " (nowych paragonów: " + (r.last_new ?? "?") + ")" : "Jeszcze nie synchronizowano") +
     (r.last_error ? " · Błąd: " + r.last_error : "");
+  // receipts table
   const tb = $("rtab").querySelector("tbody");
   tb.innerHTML = "";
   if (!r.receipts.length) {
-    tb.innerHTML = '<tr><td colspan="5" class="small">Brak paragonów w lokalnej bazie — kliknij „Synchronizuj z Lidl Plus”.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="6" class="small">Brak paragonów w lokalnej bazie — kliknij „Synchronizuj z Lidl Plus”.</td></tr>';
     return;
   }
   r.receipts.forEach(x => {
     const tr = document.createElement("tr");
-    tr.innerHTML = '<td></td><td></td><td class="num"></td><td class="num neg"></td><td style="text-align:right;white-space:nowrap"></td>';
+    tr.innerHTML =
+      '<td></td><td></td><td></td><td class="num"></td><td class="num neg"></td>' +
+      '<td style="text-align:right;white-space:nowrap"></td>';
     tr.children[0].textContent = x.date;
-    tr.children[1].textContent = x.store || "";
-    tr.children[2].textContent = x.articles ? String(x.articles) : "";
-    tr.children[3].textContent = "−" + money(x.total);
-    tr.children[4].innerHTML =
+    tr.children[1].textContent = acctName(x.account || "lidl");
+    tr.children[2].textContent = x.store || "";
+    tr.children[3].textContent = x.articles ? String(x.articles) : "";
+    tr.children[4].textContent = "−" + money(x.total);
+    let btns =
       '<button class="ghost" data-rv="' + x.id + '" style="padding:3px 9px">pokaż</button> ' +
+      (x.booked_tx
+        ? '<button class="ghost" data-ru="' + x.id + '" style="padding:3px 9px">odblokuj</button> '
+        : '<button class="ghost" data-rb="' + x.id + '" style="padding:3px 9px">zaksięguj</button> ') +
       '<button class="danger" data-rd="' + x.id + '" style="padding:3px 9px">usuń</button>';
+    tr.children[5].innerHTML = btns;
     tb.appendChild(tr);
   });
   tb.querySelectorAll("[data-rv]").forEach(b => {
     b.onclick = () => window.open(API_DIR + "api/receipts/" + b.dataset.rv + "/print", "_blank");
   });
+  tb.querySelectorAll("[data-rb]").forEach(b => {
+    b.onclick = async () => {
+      let cat = sel.value || "";
+      try {
+        await api("/api/receipts/" + b.dataset.rb + "/book", { method: "POST", body: JSON.stringify({ category: cat }) });
+        msg("Zaksięgowano paragon jako wydatek", "ok"); loadReceipts();
+      } catch (e) { msg(e.message, "err"); }
+    };
+  });
+  tb.querySelectorAll("[data-ru]").forEach(b => {
+    b.onclick = async () => {
+      if (!confirm("Usunąć transakcję wytworzoną z tego paragonu? (paragon zostaje)")) return;
+      try {
+        await api("/api/receipts/" + b.dataset.ru + "/book", { method: "DELETE" });
+        msg("Usunięto transakcję paragonu", "ok"); loadReceipts();
+      } catch (e) { msg(e.message, "err"); }
+    };
+  });
   tb.querySelectorAll("[data-rd]").forEach(b => {
     b.onclick = async () => {
-      if (!confirm("Usunąć paragon z lokalnej bazy? (w Lidl Plus zostaje)")) return;
+      if (!confirm("Usunąć paragon z lokalnej bazy? (w Lidl Plus zostaje; ewentualna transakcja również zostaje)")) return;
       try {
         await api("/api/receipts/" + b.dataset.rd, { method: "DELETE" });
         msg("Usunięto", "ok"); loadReceipts();
@@ -503,6 +603,32 @@ async function loadReceipts() {
   });
   if (r.syncing) rTimer = setTimeout(loadReceipts, 3000);
 }
+
+$("la-add").onclick = async () => {
+  const id = $("la-id").value.trim();
+  const tok = $("la-token").value.trim();
+  if (!id) return msg("Podaj id konta", "err");
+  if (!tok) return msg("Wklej refresh token", "err");
+  try {
+    await api("/api/lidl/accounts", {
+      method: "POST",
+      body: JSON.stringify({ id: id, name: $("la-name").value.trim(), token: tok })
+    });
+    msg("Dodano konto — kliknij „Synchronizuj z Lidl Plus”", "ok");
+    $("la-id").value = ""; $("la-name").value = ""; $("la-token").value = "";
+    loadReceipts();
+  } catch (e) { msg(e.message, "err"); }
+};
+
+$("r-autosave").onclick = async () => {
+  try {
+    await api("/api/receipts/auto_book", {
+      method: "PUT",
+      body: JSON.stringify({ enabled: $("r-autobook").checked, category: $("r-autocat").value })
+    });
+    msg("Zapisano ustawienia paragonów", "ok");
+  } catch (e) { msg(e.message, "err"); }
+};
 
 $("r-sync").onclick = async () => {
   try {

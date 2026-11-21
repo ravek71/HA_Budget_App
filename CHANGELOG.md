@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.3.0 (2026-11-21)
+
+- **Wiele kont Lidl Plus**: nowa tabela `lidl_accounts` (id, nazwa, refresh
+  token). Zakładka „Lidl - paragony” — dodawanie/usuwanie dowolnej liczby
+  kont, zmiana tokena bez usuwania konta. Synchronizacja idzie przez wszystkie
+  konta; uszkodzony token jednego konta nie przerywa reszty (błąd w statusie).
+  Zestawienie paragonów jest wspólne — każdy paragon oznaczony jest kontem.
+- **Auto-księgowanie paragonów**: każdy nowy paragon po synchronizacji tworzy
+  transakcję wydatku (data i kwota z paragonu, notatka „Paragon Lidl …”).
+  Kategoria: ustawiona w zakładce (lista kategorii wydatków) albo
+  auto-detekcja (pierwsza kategoria wydatku z „Lidl” w nazwie). Przełącznik
+  i kategoria w zakładce; ręcznie: przyciski „zaksięguj” / „odblokuj” przy
+  każdym paragonie. „Odblokuj” usuwa transakcję, paragon zostaje.
+- Token z wersji 0.2.x (opcja `lidl_refresh_token` / settings) migrowany
+  automatycznie do pierwszego konta.
+- Zakładka „Paragony” → „Lidl - paragony”.
+- Endpoints: `GET/POST /api/lidl/accounts`, `PUT/DELETE
+  /api/lidl/accounts/<id>`, `PUT /api/receipts/auto_book`,
+  `POST /api/receipts/<id>/book`, `DELETE /api/receipts/<id>/book`.
+- `GET /api/receipts` zwraca też `accounts`, `auto_book`, `auto_category`.
+
+## 0.2.1 (2026-11-21)
+
+- Diagnostyka błędu listy paragonów: komunikat z podglądem odpowiedzi
+  serwera (300 znaków) + tolerancja na wrapper listy (`tickets`/`items`/
+  `data`/`result`/`content`). Nowy skrypt `tools/debug_lidl.py`
+  (token, lista v2, lista v3, detail).
+
 ## 0.2.0 (2026-11-21)
 
 - **Paragony Lidl Plus**: nowa zakładka „Paragony” w panelu. Synchronizacja

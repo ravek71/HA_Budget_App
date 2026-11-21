@@ -21,9 +21,11 @@ Bez zewnętrznych zależności — tylko standardowa biblioteka Pythona
   (auto 1. dnia miesiąca), przycisk „Zaksięguj stałe (teraz)", usuwanie,
 - **Historia** — seria 12 miesięcy + transakcje wybranego miesiąca
   (edycja i usuwanie pojedynczych wpisów),
-- **Paragony** — paragony **Lidl Plus** synchronizowane z konta (nowa
-  tabela w bazie): lista, otwarcie paragonu w nowej karcie
-  (Drukuj → Zapisz jako PDF), usuwanie kopii lokalnej.
+- **Lidl - paragony** — paragony **Lidl Plus** synchronizowane z
+  **wielu kont** (wspólne zestawienie; każdy paragon oznaczony kontem):
+  lista, otwarcie paragonu w nowej karcie (Drukuj → Zapisz jako PDF),
+  auto-księgowanie paragonów jako wydatków (albo ręcznie „zaksięguj”),
+  usuwanie kopii lokalnej.
 
 ## Instalacja
 
@@ -74,19 +76,33 @@ zablokować). Dotyczy wyłącznie danych Twojego własnego konta.
    `python tools\get_lidl_token.py` — otwiera przeglądarkę, logujesz się
    do Lidl Plus normalnie; po przekierowaniu przeglądarka pokaże błąd
    `com.lidlplus.app://callback?code=...` — **skopiuj ten adres** z paska
-   i wklej w konsoli. Skrypt wypisze **refresh token**.
-2. **Opcje add-onu** („Budżet domowy” → Konfiguracja): wklej token do
-   `lidl_refresh_token` (domyślnie `lidl_country: PL`, `lidl_language: pl`
-   — zmień tylko przy innym kraju). Zapisz/odśwież add-on.
-3. **Panel → Paragony → „Synchronizuj z Lidl Plus”** — synchronizacja
-   działa w tle (status widać w karcie; panel odświeża się sam).
+   i wklej w konsoli. Skrypt wypisze **refresh token**. Dla drugiego
+   konta (np. żony) powtórz ten sam krok pod jej loginem.
+2. **Panel → zakładka „Lidl - paragony” → dodaj konto**: id (np.
+   `konto2`), nazwa (np. „Konto żony”), wklej token. Kont jest tyle,
+   ile chcesz — synchronizacja idzie przez wszystkie, a zestawienie
+   paragonów jest wspólne (każdy paragon oznaczony kontem). Uszkodzony
+   token jednego konta nie przerywa reszty — błąd widać w statusie.
+   (Opcja add-onu `lidl_refresh_token` z 0.2.x została automatycznie
+   zmigrowana do pierwszego konta; `lidl_country: PL`,
+   `lidl_language: pl` nadal globalne.)
+3. **„Synchronizuj z Lidl Plus”** — synchronizacja działa w tle
+   (status widać w karcie; panel odświeża się sam). Pobiera wszystkie
+   dostępne paragony (API Lidl ma zwykle ~12 miesięcy — starszych nie
+   ma w źródle).
 4. Paragon: **pokaż** → nowa karta z paragonem → „Drukuj → Zapisz jako
    PDF”. **Usuń** kasuje tylko kopię lokalną.
+5. **Auto-księgowanie**: zaznacz „auto-księgowanie paragonów jako
+   wydatków” i wybierz kategorię (domyślnie auto-detekcja: pierwsza
+   kategoria wydatku z „Lidl” w nazwie). Każdy nowy paragon tworzy
+   transakcję wydatku (data i kwota z paragonu). Ręcznie: „zaksięguj” /
+   „odblokuj” przy każdym paragonie.
 
-Tokeny: access token żyje ~20 min — add-on sam go odświeża. Refresh token
-**rotuje** (Lidl zwraca nową wersję przy każdym odświeżeniu) — add-on
-przechowuje aktualną wersję w swojej bazie od pierwszej synchronizacji;
-opcja służy jako wejście/rezerwa. Token traktuj jak hasło.
+Tokeny: access token żyje ~20 min — add-on sam go odświeża per konto.
+Refresh token **rotuje** (Lidl zwraca nową wersję przy każdym
+odświeżeniu) — add-on przechowuje aktualną wersję w swojej bazie
+(tabela `lidl_accounts`) od pierwszej synchronizacji; pole w zakładce
+służy do zmiany tokena (np. po wygaśnięciu). Token traktuj jak hasło.
 
 ## API (REST)
 
@@ -106,10 +122,17 @@ automatów przez webhook/REST call):
 | DELETE | `/api/transactions/<id>` | usunięcie transakcji |
 | PUT | `/api/total_budget` | `{"amount"}` — budżet miesięczny (plan) |
 | POST | `/api/recurring` | zaksięguj stałe bieżącego miesiąca teraz |
-| GET | `/api/receipts` | paragony (bez HTML) + status synchronizacji |
+| GET | `/api/receipts` | paragony (bez HTML) + status + konta + auto-księgowanie |
 | POST | `/api/receipts/sync` | start synchronizacji z Lidl Plus (w tle) |
 | GET | `/api/receipts/<id>/print` | HTML paragonu (do druku/PDF w przeglądarce) |
 | DELETE | `/api/receipts/<id>` | usunięcie kopii lokalnej paragonu |
+| PUT | `/api/receipts/auto_book` | `{"enabled","category"?}` — auto-księgowanie paragonów |
+| POST | `/api/receipts/<id>/book` | `{"category"?}` — zaksięguj paragon jako wydatek |
+| DELETE | `/api/receipts/<id>/book` | usuń transakcję z paragonu (paragon zostaje) |
+| GET | `/api/lidl/accounts` | lista kont Lidl Plus |
+| POST | `/api/lidl/accounts` | `{"id","name","token"}` — dodaj konto |
+| PUT | `/api/lidl/accounts/<id>` | `{"name"?,"token"?}` — zmiana konta |
+| DELETE | `/api/lidl/accounts/<id>` | usunięcie konta |
 | GET | `/healthz` | status + wersja |
 
 ## Dane

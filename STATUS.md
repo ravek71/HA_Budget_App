@@ -1,11 +1,13 @@
 # Status — HA_Budget_App (app add-on „Budżet domowy")
 
-Stan na: 2026-11-21. U usera działa **0.1.2** (potwierdzone: „Działa");
-na dysku gotowe **0.2.0** (testy zielone): **Paragony Lidl Plus** —
-nowa tabela `receipts`, zakładka „Paragony”, sync w tle z nieoficjalnego
-API (`app/lidl.py`, `app/lidlsync.py`), opcje `lidl_refresh_token` /
-`lidl_country` / `lidl_language`, skrypt `tools/get_lidl_token.py`
-(jednorazowy login w przeglądarce → token do opcji).
+Stan na: 2026-11-21. U usera działa **0.2.0/0.2.1** (potwierdzone:
+„działa!" — token i sync OK, paragony pobierane); na dysku gotowe
+**0.3.0** (testy zielone): **wiele kont Lidl Plus** (tabela
+`lidl_accounts`, zakładka „Lidl - paragony”, wspólne zestawienie,
+uszkodzony token jednego konta nie rzuca reszty), **auto-księgowanie
+paragonów** jako wydatków (przełącznik + kategoria, albo ręcznie
+„zaksięguj/odblokuj” przy paragonie), migracja starego tokena
+(`lidl_refresh_token`) do pierwszego konta.
 
 Zweryfikowane na żywo (2026-11-21, od maszyny usera):
 - URL autoryzacyjny (`/connect/authorize` + PKCE, Country=PL, language=pl-PL)
@@ -22,9 +24,10 @@ panelu** (`API_DIR` z `location.pathname`), nigdy absolutnie.
 
 ## Gotowe
 - Add-on `budget/`: `config.yaml` (ingress, port 8099, watchdog `/healthz`,
-  opcje `log_level` + `auto_recurring`), `Dockerfile` (python:3.12-slim,
-  wzorzec 1:1 z HA_News), `requirements.txt` (tylko flask), `app/`
-  (`__init__`, `__main__`, `config`, `data`, `server`, `panel`),
+  opcje `log_level` + `auto_recurring` + `lidl_country`/`lidl_language`),
+  `Dockerfile` (python:3.12-slim, wzorzec 1:1 z HA_News),
+  `requirements.txt` (tylko flask), `app/` (`__init__`, `__main__`,
+  `config`, `data`, `server`, `panel`, `lidl`, `lidlsync`),
   `translations/pl.yaml`.
 - CI: `.github/workflows/builder.yaml` + `build-app.yaml` (kopia z HA_News)
   — build obrazu `ghcr.io/ravek71/budget-app` (amd64 + aarch64).
@@ -39,11 +42,12 @@ panelu** (`API_DIR` z `location.pathname`), nigdy absolutnie.
 HA_Budget_App/
 ├── .github/workflows/{builder,build-app}.yaml
 ├── budget/
-│   ├── app/{__init__,__main__,config,data,server,panel}.py
+│   ├── app/{__init__,__main__,config,data,server,panel,lidl,lidlsync}.py
 │   ├── translations/pl.yaml
 │   ├── config.yaml
 │   ├── Dockerfile
 │   └── requirements.txt
+├── tools/{get_lidl_token.py,debug_lidl.py}
 ├── repository.yaml
 ├── .gitignore
 ├── CHANGELOG.md
@@ -71,15 +75,21 @@ HA_Budget_App/
 - `C:\AI_Project\HA_News` (1.2.2) — w tle czeka wgranie na GitHub.
 - `C:\AI_Project\HA_Budget\Home Budget` — repo usera, nietknięte.
 
-## Następne kroki (user)
-1. GitHub: nowe publiczne repo `ravek71/HA_Budget_App` → wgrać zawartość
-   `C:\AI_Project\HA_Budget_App.zip` (folder `budget/`, `.github/`,
-   `repository.yaml`, README/CHANGELOG/STATUS, .gitignore) → commit.
-2. Odczekać na workflow **Builder** (GHCR `ghcr.io/ravek71/budget-app`).
-3. HA → Add-ony → ⋮ → Sklep z dodatkami → ⋮ → Repozytoria niestandardowe →
-   `https://github.com/ravek71/HA_Budget_App` → Zainstaluj „Budżet domowy"
-   → Uruchom.
-4. Panel w sidebarze (ikona portfel) → kategorie → budżet → transakcje.
-5. (Opcjonalnie) usunąć starą integrację HACS „Budżet domowy" z HA
+## Następne kroki (user) — wdrożenie 0.3.0
+1. GitHub Web UI (repo `ravek71/HA_Budget_App`, gałąź `main`): wgraj
+   zawartość `C:\AI_Project\HA_Budget_App.zip` (całość — nadpisuje pliki,
+   commit message: „0.3.0"). Kluczowe: `budget/config.yaml` ma
+   `version: "0.3.0"` (tag obrazu GHCR = wersja z config.yaml).
+2. Actions → **Builder** → zielony (~2 min) → obraz
+   `ghcr.io/ravek71/budget-app:0.3.0`.
+3. HACS (⋮ → Check for updates, jeśli nie widać) → Add-ony → „Budżet
+   domowy" → **Update** (0.2.x → 0.3.0) → panel F5.
+4. Panel → zakładka **Lidl - paragony**: stare konto z 0.2.x zostanie
+   zmigrowane automatycznie (token z opcji → tabela `lidl_accounts`).
+   Ewentualnie dodaj drugie konto (id + nazwa + token z
+   `tools/get_lidl_token.py` pod drugim loginem).
+5. Ustawienia paragonów: zaznacz auto-księgowanie + kategoria (albo
+   auto-detekcja) → Zapisz → **Synchronizuj z Lidl Plus**.
+6. (Opcjonalnie) usunąć starą integrację HACS „Budżet domowy" z HA
    (Ustawienia → Urządzenia i usługi → Budżet domowy → Usuń) i repo
    `ravek71/HA_Budget`.

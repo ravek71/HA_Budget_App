@@ -262,9 +262,16 @@ def make_app(data: BudgetData, sync: Optional[LidlSync] = None) -> Flask:
             "last_sync": None,
             "last_new": None,
             "last_error": None,
+            "accounts": [],
         }
         meta["receipts"] = data.receipts()
         meta["count"] = len(meta["receipts"])
+        if sync is not None:
+            meta["auto_book"] = sync.auto_book_enabled
+            meta["auto_category"] = sync.auto_category_key()
+        else:
+            meta["auto_book"] = False
+            meta["auto_category"] = ""
         return jsonify(meta)
 
     @app.post("/api/receipts/sync")
@@ -273,12 +280,120 @@ def make_app(data: BudgetData, sync: Optional[LidlSync] = None) -> Flask:
             return _err("synchronizacja Lidl Plus nie jest dostępna")
         if not sync.configured:
             return _err(
-                "Ustaw lidl_refresh_token w opcjach add-onu "
-                "(jak go zdobyć: plik tools/get_lidl_token.py w repo — patrz README)."
+                "Brak kont Lidl Plus — dodaj konto poniżej (token: "
+                "plak tools/get_lidl_token.py w repo, patrz README)."
             )
         if not sync.start():
             return _err("synchronizacja już trwa — poczekaj na koniec", 409)
         return jsonify({"started": True})
+
+    # ---------------------------------------------------------- lidl accounts
+
+    @app.get("/api/lidl/accounts")
+    def api_lidl_accounts():
+        return jsonify({"accounts": data.lidl_accounts()})
+
+    @app.post("/api/lidl/accounts")
+    def api_lidl_add_account():
+        body = _json_body()
+        account_id = str(body.get("id") or "").strip()
+        name = str(body.get("name") or "").strip()
+        token = str(body.get("token") or "").strip()
+        if not account_id or not token:
+            return _err("podaj id konta i token (refresh token z Lidl Plus)")
+        if data.lidl_account(account_id) is not None:
+            return _err("konto o tym id już istnieje")
+        acct = data.add_lidl_account(account_id, name or account_id, token)
+        return jsonify({"account": acct}), 201
+
+    @app.put("/api/lidl/accounts/<account_id>")
+    def api_lidl_update_account(account_id: str):
+        body = _json_body()
+        if data.lidl_account(account_id) is None:
+            return _err("brak konta o tym id", 404)
+        name = body.get("name")
+        token = str(body.get("token") or "").strip()
+        if token:
+            data.set_lidl_account_token(account_id, token)
+        if name is not None and str(name).strip():
+            data._execute(  # noqa: SLF001 — small, internal
+                "UPDATE lidl_accounts SET name = ? WHERE id = ?",
+                (str(name).strip(), account_id),
+            )
+        return jsonify({"account": data.lidl_account(account_id)})
+
+    @app.delete("/api/lidl/accounts/<account_id>")
+    def api_lidl_remove_account(account_id: str):
+        if not data.remove_lidl_account(account_id):
+            return _err("brak konta o tym id", 404)
+        return jsonify({"ok": True})
+
+    # ---------------------------------------------------------- auto booking
+
+    @app.put("/api/receipts/auto_book")
+    def api_receipts_auto_book():
+        body = _json_body()
+        enabled = bool(body.get("enabled", True))
+        data.set_setting("lidl_auto_book", "1" if enabled else "0")
+        if "category" in body:
+            key = str(body.get("category") or "").strip()
+            if key:
+                if data.get_category(key) is None:
+                    return _err(f"brak kategorii: {key!r}")
+                data.set_setting("lidl_auto_category", key)
+            else:
+                data.delete_setting("lidl_auto_category")
+        return jsonify(
+            {
+                "enabled": enabled,
+                "category": (
+                    data.get_setting("lidl_auto_category") or ""
+                ),
+            }
+        )
+
+    @app.post("/api/receipts/<ticket_id>/book")
+    def api_receipt_book(ticket_id: str):
+        """Book one receipt as an expense transaction (idempotent)."""
+        rec = data.receipt(ticket_id)
+        if rec is None:
+            return _err("brak paragonu o tym id", 404)
+        if rec.get("booked_tx"):
+            return jsonify({"ok": True, "tx_id": rec["booked_tx"],
+                            "already": True})
+        if rec["total"] <= 0:
+            return _err("paragon bez kwoty — nie można zaksięgować")
+        body = _json_body()
+        key = str(body.get("category") or "").strip()
+        if key:
+            if data.get_category(key) is None:
+                return _err(f"brak kategorii: {key!r}")
+        else:
+            key = sync.auto_category_key() if sync is not None else ""
+            if not key:
+                return _err(
+                    "Wybierz kategorię (lista poniżej) — brak ustawionej "
+                    "kategorii dla paragonów Lidl"
+                )
+        tx_id = data.add_transaction(
+            key, rec["total"], rec["date"][:10] or None,
+            note=f"Paragon Lidl {ticket_id[:8]}",
+        )
+        data.book_receipt(ticket_id, tx_id)
+        return jsonify({"ok": True, "tx_id": tx_id, "category": key}), 201
+
+    @app.delete("/api/receipts/<ticket_id>/book")
+    def api_receipt_unbook(ticket_id: str):
+        """Delete the transaction created from this receipt (link cleared)."""
+        rec = data.receipt(ticket_id)
+        if rec is None:
+            return _err("brak paragonu o tym id", 404)
+        tx_id = rec.get("booked_tx")
+        if tx_id:
+            if not data.delete_transaction(int(tx_id)):
+                log.warning("unbook: transakcja %s zniknęła", tx_id)
+        data.unbook_receipt(ticket_id)
+        return jsonify({"ok": True})
 
     @app.get("/api/receipts/<ticket_id>/print")
     def api_receipt_print(ticket_id: str):

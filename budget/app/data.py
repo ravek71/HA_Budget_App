@@ -11,10 +11,14 @@ categories:    key (slug), name, kind ('income' | 'expense'),
                category, 0 = no planned budget)
 transactions:  date (YYYY-MM-DD), category_key, amount (> 0, direction
                comes from the category kind), note
-settings:      key/value (currently: total_budget, lidl_refresh_token)
+settings:      key/value (total_budget, lidl_auto_book, lidl_auto_category;
+                legacy lidl_refresh_token is migrated into lidl_accounts)
 receipts:      Lidl Plus receipts synced from the unofficial API — id
-                (ticket id), date, store, total, articles, html
-                (htmlPrintedReceipt), raw (full detail JSON), synced_at
+                (ticket id), account (lidl_accounts id), date, store, total,
+                articles, html (htmlPrintedReceipt), raw (full detail JSON),
+                booked_tx (transaction created from this receipt, if any),
+                synced_at
+lidl_accounts: Lidl Plus accounts (id, name, refresh token) — one or more
 """
 
 from __future__ import annotations
@@ -83,6 +87,7 @@ class BudgetData:
                 );
                 CREATE TABLE IF NOT EXISTS receipts (
                     id TEXT PRIMARY KEY,
+                    account TEXT NOT NULL DEFAULT 'lidl',
                     date TEXT NOT NULL,
                     datetime TEXT NOT NULL DEFAULT '',
                     store TEXT NOT NULL DEFAULT '',
@@ -90,12 +95,40 @@ class BudgetData:
                     articles INTEGER NOT NULL DEFAULT 0,
                     html TEXT NOT NULL DEFAULT '',
                     raw TEXT NOT NULL DEFAULT '',
+                    booked_tx INTEGER,
+                    booked_at TEXT NOT NULL DEFAULT '',
                     synced_at TEXT NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS idx_receipts_date
                     ON receipts(date);
+                CREATE TABLE IF NOT EXISTS lidl_accounts (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    refresh_token TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
                 """
             )
+            self._conn.commit()
+            # migrate receipts tables created by older versions (0.2.x)
+            cols = {
+                r["name"]
+                for r in self._conn.execute("PRAGMA table_info(receipts)")
+            }
+            if "account" not in cols:
+                self._conn.execute(
+                    "ALTER TABLE receipts ADD COLUMN account TEXT NOT NULL"
+                    " DEFAULT 'lidl'"
+                )
+            if "booked_tx" not in cols:
+                self._conn.execute(
+                    "ALTER TABLE receipts ADD COLUMN booked_tx INTEGER"
+                )
+            if "booked_at" not in cols:
+                self._conn.execute(
+                    "ALTER TABLE receipts ADD COLUMN booked_at TEXT NOT NULL"
+                    " DEFAULT ''"
+                )
             self._conn.commit()
 
     def close(self) -> None:
@@ -301,19 +334,26 @@ class BudgetData:
         html: str,
         raw: str,
         datetime_str: str = "",
+        account: str = "lidl",
     ) -> None:
-        """Insert or replace one synced receipt (by ticket id)."""
+        """Insert or replace one synced receipt (by ticket id).
+
+        Booking fields (booked_tx/booked_at) survive a re-sync: replacing
+        the receipt keeps the link to the budget transaction.
+        """
         self._execute(
-            "INSERT INTO receipts (id, date, datetime, store, total, articles,"
-            " html, raw, synced_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO receipts (id, account, date, datetime, store, total,"
+            " articles, html, raw, synced_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             " ON CONFLICT(id) DO UPDATE SET"
-            " date = excluded.date, datetime = excluded.datetime,"
-            " store = excluded.store, total = excluded.total,"
-            " articles = excluded.articles, html = excluded.html,"
-            " raw = excluded.raw, synced_at = excluded.synced_at",
+            " account = excluded.account, date = excluded.date,"
+            " datetime = excluded.datetime, store = excluded.store,"
+            " total = excluded.total, articles = excluded.articles,"
+            " html = excluded.html, raw = excluded.raw,"
+            " synced_at = excluded.synced_at",
             (
                 str(receipt_id),
+                str(account or "lidl"),
                 (date_str or "")[:10] or datetime.now().strftime("%Y-%m-%d"),
                 datetime_str or "",
                 (store or "").strip(),
@@ -328,10 +368,28 @@ class BudgetData:
     def receipts(self) -> list[dict[str, Any]]:
         """List rows without the heavy html/raw columns (panel table)."""
         rows = self._query(
-            "SELECT id, date, store, total, articles, synced_at"
-            " FROM receipts ORDER BY datetime DESC, id DESC"
+            "SELECT id, account, date, store, total, articles, booked_tx,"
+            " synced_at FROM receipts ORDER BY datetime DESC, id DESC"
         )
         return [dict(r) for r in rows]
+
+    def book_receipt(self, receipt_id: str, tx_id: int) -> None:
+        """Link a synced receipt to the transaction created from it."""
+        self._execute(
+            "UPDATE receipts SET booked_tx = ?, booked_at = ? WHERE id = ?",
+            (
+                int(tx_id),
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                str(receipt_id),
+            ),
+        )
+
+    def unbook_receipt(self, receipt_id: str) -> None:
+        """Clear the booking link (the transaction is deleted by the caller)."""
+        self._execute(
+            "UPDATE receipts SET booked_tx = NULL, booked_at = '' WHERE id = ?",
+            (str(receipt_id),),
+        )
 
     def receipt(self, receipt_id: str) -> Optional[dict[str, Any]]:
         rows = self._query(
@@ -349,6 +407,52 @@ class BudgetData:
                 self.open()
             cur = self._conn.execute(
                 "DELETE FROM receipts WHERE id = ?", (str(receipt_id),)
+            )
+            self._conn.commit()
+            return cur.rowcount > 0
+
+    # ----------------------------------------------------------- lidl accounts
+
+    def lidl_accounts(self) -> list[dict[str, Any]]:
+        rows = self._query(
+            "SELECT id, name, refresh_token, created_at"
+            " FROM lidl_accounts ORDER BY created_at, id"
+        )
+        return [dict(r) for r in rows]
+
+    def lidl_account(self, account_id: str) -> Optional[dict[str, Any]]:
+        rows = self._query(
+            "SELECT * FROM lidl_accounts WHERE id = ?", (str(account_id),)
+        )
+        return dict(rows[0]) if rows else None
+
+    def add_lidl_account(
+        self, account_id: str, name: str, refresh_token: str
+    ) -> dict[str, Any]:
+        self._execute(
+            "INSERT INTO lidl_accounts (id, name, refresh_token, created_at)"
+            " VALUES (?, ?, ?, ?)",
+            (
+                str(account_id),
+                (name or "Konto Lidl").strip(),
+                (refresh_token or "").strip(),
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            ),
+        )
+        return self.lidl_account(account_id)  # type: ignore[return-value]
+
+    def set_lidl_account_token(self, account_id: str, refresh_token: str) -> None:
+        self._execute(
+            "UPDATE lidl_accounts SET refresh_token = ? WHERE id = ?",
+            ((refresh_token or "").strip(), str(account_id)),
+        )
+
+    def remove_lidl_account(self, account_id: str) -> bool:
+        with self._lock:
+            if self._conn is None:
+                self.open()
+            cur = self._conn.execute(
+                "DELETE FROM lidl_accounts WHERE id = ?", (str(account_id),)
             )
             self._conn.commit()
             return cur.rowcount > 0
@@ -371,6 +475,9 @@ class BudgetData:
             " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (key, str(value)),
         )
+
+    def delete_setting(self, key: str) -> None:
+        self._execute("DELETE FROM settings WHERE key = ?", (key,))
 
     def set_total_budget(self, value: float) -> float:
         value = round(float(value), 2)
