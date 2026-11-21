@@ -1,3 +1,3 @@
 """HA Budget - home budget planning (SQLite) exposed to Home Assistant via REST API + ingress panel."""
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
