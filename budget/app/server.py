@@ -6,6 +6,7 @@ the /api/* endpoints below.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import date
 from typing import Any, Optional
 
@@ -59,6 +60,16 @@ def _month_from_args() -> tuple[int, int, Optional[tuple]]:
 def _json_body() -> dict:
     body = request.get_json(silent=True)
     return body if isinstance(body, dict) else {}
+
+
+def _account_id(data: "BudgetData", name: str) -> str:
+    """Unique account id generated from the account name."""
+    base = re.sub(r"\W+", "-", name.lower()).strip("-") or "konto"
+    candidate, n = base, 1
+    while data.lidl_account(candidate) is not None:
+        n += 1
+        candidate = f"{base}-{n}"
+    return candidate
 
 
 def make_app(data: BudgetData, sync: Optional[LidlSync] = None) -> Flask:
@@ -266,6 +277,9 @@ def make_app(data: BudgetData, sync: Optional[LidlSync] = None) -> Flask:
         }
         meta["receipts"] = data.receipts()
         meta["count"] = len(meta["receipts"])
+        # live account list straight from the DB (sync status may be stale
+        # or empty right after a restart / before the first sync)
+        meta["accounts"] = data.lidl_accounts()
         if sync is not None:
             meta["auto_book"] = sync.auto_book_enabled
             meta["auto_category"] = sync.auto_category_key()
@@ -296,14 +310,16 @@ def make_app(data: BudgetData, sync: Optional[LidlSync] = None) -> Flask:
     @app.post("/api/lidl/accounts")
     def api_lidl_add_account():
         body = _json_body()
-        account_id = str(body.get("id") or "").strip()
         name = str(body.get("name") or "").strip()
         token = str(body.get("token") or "").strip()
-        if not account_id or not token:
-            return _err("podaj id konta i token (refresh token z Lidl Plus)")
+        if not name or not token:
+            return _err("podaj nazwę konta i token (refresh token z Lidl Plus)")
+        account_id = str(body.get("id") or "").strip()
+        if not account_id:
+            account_id = _account_id(data, name)
         if data.lidl_account(account_id) is not None:
-            return _err("konto o tym id już istnieje")
-        acct = data.add_lidl_account(account_id, name or account_id, token)
+            return _err("konto o tej nazwie już istnieje")
+        acct = data.add_lidl_account(account_id, name, token)
         return jsonify({"account": acct}), 201
 
     @app.put("/api/lidl/accounts/<account_id>")
@@ -316,10 +332,7 @@ def make_app(data: BudgetData, sync: Optional[LidlSync] = None) -> Flask:
         if token:
             data.set_lidl_account_token(account_id, token)
         if name is not None and str(name).strip():
-            data._execute(  # noqa: SLF001 — small, internal
-                "UPDATE lidl_accounts SET name = ? WHERE id = ?",
-                (str(name).strip(), account_id),
-            )
+            data.set_lidl_account_name(account_id, str(name))
         return jsonify({"account": data.lidl_account(account_id)})
 
     @app.delete("/api/lidl/accounts/<account_id>")

@@ -78,14 +78,14 @@ zablokować). Dotyczy wyłącznie danych Twojego własnego konta.
    `com.lidlplus.app://callback?code=...` — **skopiuj ten adres** z paska
    i wklej w konsoli. Skrypt wypisze **refresh token**. Dla drugiego
    konta (np. żony) powtórz ten sam krok pod jej loginem.
-2. **Panel → zakładka „Lidl - paragony” → dodaj konto**: id (np.
-   `konto2`), nazwa (np. „Konto żony”), wklej token. Kont jest tyle,
-   ile chcesz — synchronizacja idzie przez wszystkie, a zestawienie
-   paragonów jest wspólne (każdy paragon oznaczony kontem). Uszkodzony
-   token jednego konta nie przerywa reszty — błąd widać w statusie.
+2. **Panel → zakładka „Lidl - paragony” → dodaj konto**: nazwa
+   (np. „Konto żony”) + wklejony token. Kont jest tyle, ile chcesz —
+   synchronizacja idzie przez wszystkie, a zestawienie paragonów jest
+   wspólne (każdy paragon oznaczony kontem). Uszkodzony token jednego
+   konta nie przerywa reszty — błąd widać w statusie.
    (Opcja add-onu `lidl_refresh_token` z 0.2.x została automatycznie
-   zmigrowana do pierwszego konta; `lidl_country: PL`,
-   `lidl_language: pl` nadal globalne.)
+   zmigrowana do pierwszego konta i usunięta z konfiguracji add-onu;
+   `lidl_country: PL`, `lidl_language: pl` nadal globalne.)
 3. **„Synchronizuj z Lidl Plus”** — synchronizacja działa w tle
    (status widać w karcie; panel odświeża się sam). Pobiera wszystkie
    dostępne paragony (API Lidl ma zwykle ~12 miesięcy — starszych nie

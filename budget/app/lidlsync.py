@@ -211,6 +211,8 @@ class LidlSync:
                 skip=skip,
                 take=PAGE_TAKE,
             )
+            if not page:
+                break
             for item in page:
                 ticket_id = str(item.get("id") or "").strip()
                 if not ticket_id or ticket_id in known:
@@ -255,9 +257,10 @@ class LidlSync:
                     phase=f"{label}: pobieranie paragonów... nowych: {new}"
                 )
                 time.sleep(DETAIL_PAUSE_S)
-            if len(page) < PAGE_TAKE:
-                break
-            skip += PAGE_TAKE
+            # the API caps the page size (returns fewer items than
+            # requested), so advance by the ACTUAL page length and stop
+            # only on an empty page
+            skip += len(page)
         if errors:
             log.warning("lidl sync: konto %s: %d paragonów pominiętych", label, errors)
         return new

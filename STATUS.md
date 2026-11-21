@@ -2,12 +2,14 @@
 
 Stan na: 2026-11-21. U usera działa **0.2.0/0.2.1** (potwierdzone:
 „działa!" — token i sync OK, paragony pobierane); na dysku gotowe
-**0.3.0** (testy zielone): **wiele kont Lidl Plus** (tabela
-`lidl_accounts`, zakładka „Lidl - paragony”, wspólne zestawienie,
-uszkodzony token jednego konta nie rzuca reszty), **auto-księgowanie
-paragonów** jako wydatków (przełącznik + kategoria, albo ręcznie
-„zaksięguj/odblokuj” przy paragonie), migracja starego tokena
-(`lidl_refresh_token`) do pierwszego konta.
+**0.3.1** (testy zielone): fix paginacji syncu (API capuje stronę na
+~25 — teraz aż do pustej strony), wiele kont Lidl Plus (tabela
+`lidl_accounts`, zakładka „Lidl - paragony” — tylko nazwa + token,
+wspólne zestawienie, uszkodzony token jednego konta nie rzuca reszty),
+auto-księgowanie paragonów jako wydatków (przełącznik + kategoria,
+albo ręcznie „zaksięguj/odblokuj”), lista kont żywa z bazy (nowe konto
+widoczne od razu), status sync pogrubiony, `lidl_refresh_token`
+usunięte z konfiguracji add-onu, migracja starego tokena do konta.
 
 Zweryfikowane na żywo (2026-11-21, od maszyny usera):
 - URL autoryzacyjny (`/connect/authorize` + PKCE, Country=PL, language=pl-PL)
@@ -75,15 +77,15 @@ HA_Budget_App/
 - `C:\AI_Project\HA_News` (1.2.2) — w tle czeka wgranie na GitHub.
 - `C:\AI_Project\HA_Budget\Home Budget` — repo usera, nietknięte.
 
-## Następne kroki (user) — wdrożenie 0.3.0
+## Następne kroki (user) — wdrożenie 0.3.1
 1. GitHub Web UI (repo `ravek71/HA_Budget_App`, gałąź `main`): wgraj
    zawartość `C:\AI_Project\HA_Budget_App.zip` (całość — nadpisuje pliki,
-   commit message: „0.3.0"). Kluczowe: `budget/config.yaml` ma
-   `version: "0.3.0"` (tag obrazu GHCR = wersja z config.yaml).
+   commit message: „0.3.1”). Kluczowe: `budget/config.yaml` ma
+   `version: "0.3.1"` (tag obrazu GHCR = wersja z config.yaml).
 2. Actions → **Builder** → zielony (~2 min) → obraz
-   `ghcr.io/ravek71/budget-app:0.3.0`.
+   `ghcr.io/ravek71/budget-app:0.3.1`.
 3. HACS (⋮ → Check for updates, jeśli nie widać) → Add-ony → „Budżet
-   domowy" → **Update** (0.2.x → 0.3.0) → panel F5.
+   domowy" → **Update** (0.3.0 → 0.3.1) → panel F5.
 4. Panel → zakładka **Lidl - paragony**: stare konto z 0.2.x zostanie
    zmigrowane automatycznie (token z opcji → tabela `lidl_accounts`).
    Ewentualnie dodaj drugie konto (id + nazwa + token z

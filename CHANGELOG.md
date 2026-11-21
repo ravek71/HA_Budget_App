@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.1 (2026-11-21)
+
+- **Fix: sync pobierał tylko pierwszą stronę paragonów (~25)**. API Lidl
+  zwraca mniej pozycji na stronę niż zażądane (własny limit), a pętla
+  paginacji przerywała się przy `len(page) < take`. Teraz przesuwania
+  o faktyczną długość strony i koniec tylko na pustej stronie.
+- Lista kont w zakładce „Lidl - paragony" ładowana na bieżąco z bazy
+  (dawniej ze statusu synchronizacji — nowe konto było niewidoczne do
+  czasu syncu/restartu; stąd „okno się nie odświeża").
+- Dodawanie konta: tylko **nazwa + token** (id generowane automatycznie
+  z nazwy, np. „Konto żony" → `konto-żony`; duplikat nazwy = `konto-żony-2`).
+- Status synchronizacji („Synchronizacja: …") pokazywany **pogrubioną**
+  czcionką.
+- Usunięto parametr `lidl_refresh_token` z konfiguracji add-onu — konta
+  Lidl Plus zarządza się wyłącznie w panelu. Migracja legacy (settings w
+  bazie) zostaje; `lidl_country`/`lidl_language` nadal w opcjach.
+- Usunięty opis pod tabelą paragonów.
+
 ## 0.3.0 (2026-11-21)
 
 - **Wiele kont Lidl Plus**: nowa tabela `lidl_accounts` (id, nazwa, refresh

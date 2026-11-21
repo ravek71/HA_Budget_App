@@ -1,5 +1,5 @@
 name: "Budżet domowy"
-version: "0.3.0"
+version: "0.3.1"
 slug: "budget"
 description: >-
   Planowanie i śledzenie domowego budżetu: wpływy, wydatki, wydatki stałe
@@ -20,13 +20,11 @@ ingress: true
 options:
   log_level: "info"
   auto_recurring: true
-  lidl_refresh_token: ""
   lidl_country: "PL"
   lidl_language: "pl"
 schema:
   log_level: list(debug|info|warning|error)
   auto_recurring: bool
-  lidl_refresh_token: str
   lidl_country: str
   lidl_language: str
 watchdog: "http://[HOST]:[PORT:8080]/healthz"

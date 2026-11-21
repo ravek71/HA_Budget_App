@@ -447,6 +447,12 @@ class BudgetData:
             ((refresh_token or "").strip(), str(account_id)),
         )
 
+    def set_lidl_account_name(self, account_id: str, name: str) -> None:
+        self._execute(
+            "UPDATE lidl_accounts SET name = ? WHERE id = ?",
+            ((name or "").strip(), str(account_id)),
+        )
+
     def remove_lidl_account(self, account_id: str) -> bool:
         with self._lock:
             if self._conn is None:

@@ -150,8 +150,7 @@ td.num,th.num{text-align:right}
       <b>Konta Lidl Plus</b>
       <div id="r-accounts" style="margin-top:10px"></div>
       <div class="row" style="margin-top:12px;align-items:flex-end">
-        <div style="width:110px"><label>Id konta</label><input id="la-id" type="text" placeholder="np. konto2"></div>
-        <div class="f"><label>Nazwa</label><input id="la-name" type="text" placeholder="np. Konto żony"></div>
+        <div class="f"><label>Nazwa konta</label><input id="la-name" type="text" placeholder="np. Konto żony"></div>
         <div class="f" style="min-width:220px"><label>Refresh token</label><input id="la-token" type="password" placeholder="z tools/get_lidl_token.py"></div>
         <button id="la-add">Dodaj konto</button>
       </div>
@@ -173,7 +172,6 @@ td.num,th.num{text-align:right}
     <div class="card">
       <b>Paragony</b>
       <table id="rtab"><thead><tr><th>Data</th><th>Konto</th><th>Sklep</th><th class="num">Pozycje</th><th class="num">Kwota</th><th></th></tr></thead><tbody></tbody></table>
-      <p class="small" style="margin:10px 0 0">Paragon otwiera się w nowej karcie — tam „Drukuj → Zapisz jako PDF”. „Zaksięguj” tworzy transakcję wydatku (data/kwota z paragonu); „Odblokuj” ją usuwa. Usunięcie paragonu kasuje tylko kopię lokalną (w Lidl Plus zostaje; transakcja zostaje).</p>
     </div>
   </section>
 </main>
@@ -502,7 +500,7 @@ async function loadReceipts() {
       '<input data-lt="' + a.id + '" type="password" placeholder="zmień token (opcjonalnie)" style="padding:5px 8px">' +
       '<button class="ghost" data-ls="' + a.id + '" style="padding:5px 10px">Zapisz</button>' +
       '<button class="danger" data-ld="' + a.id + '" style="padding:5px 10px">Usuń</button>';
-    d.children[0].textContent = a.name + " (" + a.id + ")";
+    d.children[0].textContent = a.name;
     al.appendChild(d);
   });
   al.querySelectorAll("[data-ls]").forEach(b => {
@@ -541,7 +539,12 @@ async function loadReceipts() {
   // sync status
   const meta = $("r-meta");
   if (!r.configured) meta.textContent = "Nie skonfigurowano — dodaj konto Lidl Plus powyżej (token z tools/get_lidl_token.py).";
-  else if (r.syncing) meta.textContent = "Synchronizacja: " + (r.phase || "w trakcie") + " ...";
+  else if (r.syncing) {
+    meta.textContent = "";
+    const b = document.createElement("b");
+    b.textContent = "Synchronizacja: " + (r.phase || "w trakcie") + " ...";
+    meta.appendChild(b);
+  }
   else meta.textContent =
     (r.last_sync ? "Ostatnia synchronizacja: " + r.last_sync + " (nowych paragonów: " + (r.last_new ?? "?") + ")" : "Jeszcze nie synchronizowano") +
     (r.last_error ? " · Błąd: " + r.last_error : "");
@@ -605,18 +608,18 @@ async function loadReceipts() {
 }
 
 $("la-add").onclick = async () => {
-  const id = $("la-id").value.trim();
+  const name = $("la-name").value.trim();
   const tok = $("la-token").value.trim();
-  if (!id) return msg("Podaj id konta", "err");
+  if (!name) return msg("Podaj nazwę konta", "err");
   if (!tok) return msg("Wklej refresh token", "err");
   try {
     await api("/api/lidl/accounts", {
       method: "POST",
-      body: JSON.stringify({ id: id, name: $("la-name").value.trim(), token: tok })
+      body: JSON.stringify({ name: name, token: tok })
     });
     msg("Dodano konto — kliknij „Synchronizuj z Lidl Plus”", "ok");
-    $("la-id").value = ""; $("la-name").value = ""; $("la-token").value = "";
-    loadReceipts();
+    $("la-name").value = ""; $("la-token").value = "";
+    await loadReceipts();
   } catch (e) { msg(e.message, "err"); }
 };
 
