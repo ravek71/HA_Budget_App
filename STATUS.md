@@ -1,15 +1,15 @@
 # Status — HA_Budget_App (app add-on „Budżet domowy")
 
-Stan na: 2026-11-21. U usera działa **0.2.0/0.2.1** (potwierdzone:
-„działa!" — token i sync OK, paragony pobierane); na dysku gotowe
-**0.3.1** (testy zielone): fix paginacji syncu (API capuje stronę na
-~25 — teraz aż do pustej strony), wiele kont Lidl Plus (tabela
-`lidl_accounts`, zakładka „Lidl - paragony” — tylko nazwa + token,
-wspólne zestawienie, uszkodzony token jednego konta nie rzuca reszty),
-auto-księgowanie paragonów jako wydatków (przełącznik + kategoria,
-albo ręcznie „zaksięguj/odblokuj”), lista kont żywa z bazy (nowe konto
-widoczne od razu), status sync pogrubiony, `lidl_refresh_token`
-usunięte z konfiguracji add-onu, migracja starego tokena do konta.
+Stan na: 2026-11-22. U usera działa **0.2.1→0.3.0** (potwierdzone:
+„działa!"; 0.3.1 miał regresję: sync wisiał w pętli stron — API Lidl
+prawdopodobnie ignoruje `skip`); na dysku gotowe **0.3.2** (testy
+zielone, w tym scenariusz „API ignoruje skip"): pętla stron zawsze się
+kończy (strona bez nowych id = koniec + limit 200 stron), status pokazuje
+numer strony, `tools/debug_lidl.py` z sondą paginacji ([5]/[6]).
+Wiele kont Lidl Plus (tabela `lidl_accounts`, zakładka „Lidl - paragony”
+— tylko nazwa + token, wspólne zestawienie), auto-księgowanie paragonów
+jako wydatków, lista kont żywa z bazy, status sync pogrubiony,
+`lidl_refresh_token` usunięte z konfiguracji add-onu.
 
 Zweryfikowane na żywo (2026-11-21, od maszyny usera):
 - URL autoryzacyjny (`/connect/authorize` + PKCE, Country=PL, language=pl-PL)
@@ -77,15 +77,15 @@ HA_Budget_App/
 - `C:\AI_Project\HA_News` (1.2.2) — w tle czeka wgranie na GitHub.
 - `C:\AI_Project\HA_Budget\Home Budget` — repo usera, nietknięte.
 
-## Następne kroki (user) — wdrożenie 0.3.1
+## Następne kroki (user) — wdrożenie 0.3.2
 1. GitHub Web UI (repo `ravek71/HA_Budget_App`, gałąź `main`): wgraj
    zawartość `C:\AI_Project\HA_Budget_App.zip` (całość — nadpisuje pliki,
-   commit message: „0.3.1”). Kluczowe: `budget/config.yaml` ma
-   `version: "0.3.1"` (tag obrazu GHCR = wersja z config.yaml).
+   commit message: „0.3.2”). Kluczowe: `budget/config.yaml` ma
+   `version: "0.3.2"` (tag obrazu GHCR = wersja z config.yaml).
 2. Actions → **Builder** → zielony (~2 min) → obraz
-   `ghcr.io/ravek71/budget-app:0.3.1`.
+   `ghcr.io/ravek71/budget-app:0.3.2`.
 3. HACS (⋮ → Check for updates, jeśli nie widać) → Add-ony → „Budżet
-   domowy" → **Update** (0.3.0 → 0.3.1) → panel F5.
+   domowy" → **Update** (0.3.1 → 0.3.2) → panel F5.
 4. Panel → zakładka **Lidl - paragony**: stare konto z 0.2.x zostanie
    zmigrowane automatycznie (token z opcji → tabela `lidl_accounts`).
    Ewentualnie dodaj drugie konto (id + nazwa + token z

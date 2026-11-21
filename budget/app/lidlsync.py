@@ -35,6 +35,7 @@ log = logging.getLogger(__name__)
 
 PAGE_TAKE = 50
 DETAIL_PAUSE_S = 0.25  # be gentle with the unofficial API
+MAX_PAGES = 200  # safety cap (200 x 50 = 10000 receipts)
 
 LEGACY_TOKEN_SETTING = "lidl_refresh_token"  # 0.2.x: single token in settings
 
@@ -199,10 +200,13 @@ class LidlSync:
         country = self._settings.lidl_country
         language = self._settings.lidl_language
         self._set_status(phase=f"{label}: logowanie...")
-        known = self._data.receipt_ids()
+        known = self._data.receipt_ids()  # stored locally
+        seen = set(known)  # everything already seen during this run too
         skip, new, errors = 0, 0, 0
-        while True:
-            self._set_status(phase=f"{label}: pobieranie listy...")
+        for page_no in range(1, MAX_PAGES + 1):
+            self._set_status(
+                phase=f"{label}: strona {page_no} (od {skip})..."
+            )
             page = self._with_retry(
                 account_id,
                 lidl.list_tickets,
@@ -213,9 +217,26 @@ class LidlSync:
             )
             if not page:
                 break
+            page_ids = [
+                str(item.get("id") or "").strip()
+                for item in page
+                if str(item.get("id") or "").strip()
+            ]
+            # the API caps the page size (returns fewer items than
+            # requested) and may IGNORE the skip parameter — if a page
+            # brings nothing new, further pages would repeat forever:
+            # stop (this is also the normal end-of-list case)
+            fresh = [t for t in page_ids if t not in seen]
+            if not fresh:
+                log.info(
+                    "lidl sync: %s: strona %d bez nowych — koniec listy",
+                    label, page_no,
+                )
+                break
+            seen.update(page_ids)
             for item in page:
                 ticket_id = str(item.get("id") or "").strip()
-                if not ticket_id or ticket_id in known:
+                if not ticket_id or ticket_id not in fresh:
                     continue
                 try:
                     detail = self._with_retry(
@@ -250,17 +271,20 @@ class LidlSync:
                     ),
                     account=account_id,
                 )
-                known.add(ticket_id)
                 new += 1
                 self.auto_book(account_id, ticket_id)
                 self._set_status(
                     phase=f"{label}: pobieranie paragonów... nowych: {new}"
                 )
                 time.sleep(DETAIL_PAUSE_S)
-            # the API caps the page size (returns fewer items than
-            # requested), so advance by the ACTUAL page length and stop
-            # only on an empty page
+            # advance by the ACTUAL page length (the API caps it below
+            # the requested take)
             skip += len(page)
+        else:
+            log.warning(
+                "lidl sync: %s: osiągnięto limit %d stron — lista może "
+                "nie zostać pobrana w całości", label, MAX_PAGES,
+            )
         if errors:
             log.warning("lidl sync: konto %s: %d paragonów pominiętych", label, errors)
         return new

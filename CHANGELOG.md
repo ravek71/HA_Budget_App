@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.2 (2026-11-22)
+
+- **Fix: sync w 0.3.1 mógł wisnąć w nieskończoność** („paragony nie są
+  pobierane”). Pętla stron kończyła się dopiero na pustej stronie, a API
+  Lidl może ignorować parametr `skip` — wtedy każda strona zwraca te same
+  pozycje. Teraz: strona bez ŻADNEGO nowego paragonu = koniec listy
+  (zabezpieczenie przed pętlą) + twardy limit 200 stron. Status pokazuje
+  numer strony („strona 2 (od 25)..."), więc postęp widać od razu.
+- `tools/debug_lidl.py`: nowa sonda paginacji (punkty [5]/[6]) — pokazuje,
+  czy `skip` przesuuje listę, czy API ją ignoruje (decyduje o dalszej
+  naprawie, jeśli lista wciąż się nie domyka).
+
 ## 0.3.1 (2026-11-21)
 
 - **Fix: sync pobierał tylko pierwszą stronę paragonów (~25)**. API Lidl
