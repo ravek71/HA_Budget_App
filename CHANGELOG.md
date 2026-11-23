@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.3 (2026-11-23)
+
+- **Fix: sync przerywał się po pierwszej stronie, gdy te paragony były już
+  w bazie.** Warunek „strona bez nowych = koniec listy" (0.3.2) mieształ
+  dwa pojęcia: „już w bazie z poprzedniego syncu" i „już pobrane w tym
+  przebiegu". Przy wcześniejszym częściowym pobraniu (np. ~25 paragonów)
+  strona 1 była w całości znana z bazy → pętla kończyła się od razu,
+  mimo że `skip` mógłby pobrać strony 2..N. Teraz koniec = strona
+  CAŁKOWICIE powtórzona w tym przebiegu (API ignoruje `skip`) albo
+  osiągnięcie `totalCount` zwracanego przez API; paragony znane z bazy
+  są tylko pomijane w szczególe (bez ponownego pobierania).
+- `lidl.list_tickets` zwraca teraz `(items, totalCount)` — obsłużony
+  oficjalny format-wrapper listy (`page`/`size`/`totalCount` + `tickets`),
+  jakiego używa nowa apka Lidl Plus (v17.9.3), i format-tablicy
+  (starszy). `totalCount` = autorytatywny koniec listy, gdy API go daje.
+- `tools/debug_lidl.py`: sonda paginacji rozszerzona o [7] `pageNumber`
+  (stary parametr — czy jeszcze żywy?) i wykrywanie FORMATU odpowiedzi
+  (wrapper z metadanymi vs tablica) — output pokaże, jak dokładnie
+  stronicuje konto usera.
+
 ## 0.3.2 (2026-11-22)
 
 - **Fix: sync w 0.3.1 mógł wisnąć w nieskończoność** („paragony nie są

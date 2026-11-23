@@ -200,14 +200,15 @@ class LidlSync:
         country = self._settings.lidl_country
         language = self._settings.lidl_language
         self._set_status(phase=f"{label}: logowanie...")
-        known = self._data.receipt_ids()  # stored locally
-        seen = set(known)  # everything already seen during this run too
+        known = set(self._data.receipt_ids())  # stored locally (no refetch)
+        seen_run: set[str] = set()  # ids seen during THIS run (stuck pages)
         skip, new, errors = 0, 0, 0
+        total: int | None = None  # server-reported list length (if known)
         for page_no in range(1, MAX_PAGES + 1):
             self._set_status(
                 phase=f"{label}: strona {page_no} (od {skip})..."
             )
-            page = self._with_retry(
+            page, total = self._with_retry(
                 account_id,
                 lidl.list_tickets,
                 country,
@@ -222,21 +223,23 @@ class LidlSync:
                 for item in page
                 if str(item.get("id") or "").strip()
             ]
-            # the API caps the page size (returns fewer items than
-            # requested) and may IGNORE the skip parameter — if a page
-            # brings nothing new, further pages would repeat forever:
-            # stop (this is also the normal end-of-list case)
-            fresh = [t for t in page_ids if t not in seen]
-            if not fresh:
+            # STUCK: the whole page repeats ids already seen in this run —
+            # the API does not advance with skip (it repeats the same page)
+            # and further pages would loop forever, so stop. IMPORTANT:
+            # ids already stored in the DB are NOT a stop condition — a
+            # previous sync may have stored page 1 while pages 2..N are
+            # still missing and must be fetched now.
+            if page_ids and set(page_ids) <= seen_run:
                 log.info(
-                    "lidl sync: %s: strona %d bez nowych — koniec listy",
+                    "lidl sync: %s: strona %d powtórzona — API nie "
+                    "przesuwa listy (ignoruje skip?) — koniec",
                     label, page_no,
                 )
                 break
-            seen.update(page_ids)
+            seen_run.update(page_ids)
             for item in page:
                 ticket_id = str(item.get("id") or "").strip()
-                if not ticket_id or ticket_id not in fresh:
+                if not ticket_id or ticket_id in known:
                     continue
                 try:
                     detail = self._with_retry(
@@ -272,14 +275,18 @@ class LidlSync:
                     account=account_id,
                 )
                 new += 1
+                known.add(ticket_id)
                 self.auto_book(account_id, ticket_id)
                 self._set_status(
                     phase=f"{label}: pobieranie paragonów... nowych: {new}"
                 )
                 time.sleep(DETAIL_PAUSE_S)
             # advance by the ACTUAL page length (the API caps it below
-            # the requested take)
+            # the requested take); stop once the server-reported total
+            # is reached (authoritative end, when the wrapper provides it)
             skip += len(page)
+            if total is not None and skip >= total:
+                break
         else:
             log.warning(
                 "lidl sync: %s: osiągnięto limit %d stron — lista może "

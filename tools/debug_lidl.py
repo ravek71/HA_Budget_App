@@ -132,42 +132,67 @@ def main() -> None:
     else:
         print("[4] — brak id paragonu do testu detailu")
 
-    # [5][6] sonda paginacji: czy API przesuuje liste przy skip=25?
-    # (dodane w 0.3.2 — bez tego sync albo wisial w petli, albo
-    # pobral tylko pierwsza strone)
-    def ticket_ids(body: bytes) -> list[str]:
+    # [5][6][7] sonda paginacji (0.3.3): co zwraca API i jak stronicuje?
+    # [5] skip=0, [6] skip=25 (czy skip przesuuje liste?),
+    # [7] pageNumber=2 (stary parametr API — czy jeszcze zyw?)
+    def describe(body: bytes) -> tuple[list[str], str]:
+        """(lista id paragonow, opis formatu odpowiedzi)."""
         try:
             j = json.loads(body)
         except ValueError:
-            return []
+            return [], "brak JSON"
         if isinstance(j, dict):
+            meta = {k: v for k, v in j.items() if not isinstance(v, list)}
+            shape = "wrapper " + json.dumps(meta, ensure_ascii=False)
             for key in ("tickets", "items", "data", "result", "content"):
                 if isinstance(j.get(key), list):
                     j = j[key]
                     break
             else:
-                return []
-        if not isinstance(j, list):
-            return []
-        return [str(t.get("id")) for t in j if isinstance(t, dict) and t.get("id")]
+                return [], shape
+        elif isinstance(j, list):
+            shape = "tablica (bez wrappera)"
+        else:
+            return [], "nieznany format"
+        ids = [
+            str(t.get("id"))
+            for t in j
+            if isinstance(t, dict) and t.get("id")
+        ]
+        return ids, shape
 
     print()
     st5, b5 = show("5", f"https://tickets.lidlplus.com/api/v2/{COUNTRY}/tickets?skip=0&take=25")
-    ids5 = ticket_ids(b5)
-    print(f"    -> stron: 1, pozycji: {len(ids5)}, pierwsze id: {ids5[:3]}")
+    ids5, shape5 = describe(b5)
+    print(f"    -> format: {shape5}")
+    print(f"    -> pozycji: {len(ids5)}, pierwsze id: {ids5[:3]}")
+    print()
     st6, b6 = show("6", f"https://tickets.lidlplus.com/api/v2/{COUNTRY}/tickets?skip=25&take=25")
-    ids6 = ticket_ids(b6)
-    print(f"    -> stron: 2 (skip=25), pozycji: {len(ids6)}, pierwsze id: {ids6[:3]}")
+    ids6, shape6 = describe(b6)
+    print(f"    -> format: {shape6}")
+    print(f"    -> pozycji: {len(ids6)}, pierwsze id: {ids6[:3]}")
+    print()
+    st7, b7 = show("7", f"https://tickets.lidlplus.com/api/v2/{COUNTRY}/tickets?pageNumber=2&take=25")
+    ids7, shape7 = describe(b7)
+    print(f"    -> format: {shape7}")
+    print(f"    -> pozycji: {len(ids7)}, pierwsze id: {ids7[:3]}")
+
+    print()
     if not ids5:
-        print("    UWAGA: strona 1 pusta — lista nie zwraca nic (patrz [2]/[3]).")
-    elif ids6 and ids5[:3] == ids6[:3]:
-        print("    WNIOSK: API IGNORUJE paramet 'skip' — ta sama strona dla "
-              "każdego skip. Potrzebny inny sposob paginacji.")
-    elif not ids6:
-        print("    WNIOSK: lista miala mniej niz 25 pozycji (koniec normalny).")
+        print("WNIOSK [5]: strona 1 pusta — lista nie zwraca nic (patrz [2]/[3]).")
     else:
-        print("    WNIOSK: skip DZIALA — strony sie przesuwaja, sync powinien "
-              "pobrac wszystko.")
+        if ids6 and ids6[:3] == ids5[:3]:
+            print("WNIOSK [6]: API IGNORUJE 'skip' — strona 2 == strona 1.")
+        elif not ids6:
+            print("WNIOSK [6]: lista ma mniej niż 25 pozycji (koniec normalny).")
+        else:
+            print("WNIOSK [6]: 'skip' DZIAŁA — strona 2 to inne pozycje.")
+        if ids7 and ids7[:3] != ids5[:3]:
+            print("WNIOSK [7]: 'pageNumber' też przesuwa listę (stary parametr żywy).")
+        elif ids7 and ids7[:3] == ids5[:3]:
+            print("WNIOSK [7]: 'pageNumber' ignorowany (znów strona 1).")
+        else:
+            print("WNIOSK [7]: 'pageNumber' nie zwrócił listy.")
 
     print()
     print("== KONIEC. Skopiuj CAŁY ten output i prześlij.")

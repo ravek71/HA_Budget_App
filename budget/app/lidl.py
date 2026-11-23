@@ -124,25 +124,47 @@ def list_tickets(
     language: str,
     skip: int = 0,
     take: int = 50,
-) -> list[dict]:
+) -> tuple[list[dict], int | None]:
+    """Paged receipts list (newest first).
+
+    Returns ``(items, total_count)``. The server answers either a plain
+    JSON array or a wrapper object (``tickets``/``items``/... plus
+    ``page``/``size``/``totalCount`` — varies by region/version); both
+    are accepted. ``total_count`` is the server-reported list length
+    when the wrapper carries ``totalCount``, else None.
+    """
     url = f"{TICKETS_BASE}/v2/{country}/tickets?skip={skip}&take={take}"
     result = _http("GET", url, headers=_app_headers(access_token, language))
+    items: list[dict]
+    total: int | None = None
     if isinstance(result, dict):
         # some regions/versions wrap the list in an object — accept the
         # common wrapper keys, fail with a body preview otherwise
+        items = None
         for key in ("tickets", "items", "data", "result", "content"):
             if isinstance(result.get(key), list):
-                return result[key]
-        raise LidlError(
-            "Lidl: nieoczekiwany format listy paragonów: "
-            + json.dumps(result, ensure_ascii=False)[:300]
-        )
-    if not isinstance(result, list):
+                items = result[key]
+                break
+        if items is None:
+            raise LidlError(
+                "Lidl: nieoczekiwany format listy paragonów: "
+                + json.dumps(result, ensure_ascii=False)[:300]
+            )
+        tc = result.get("totalCount")
+        if isinstance(tc, bool):
+            tc = None
+        if isinstance(tc, int):
+            total = tc
+        elif isinstance(tc, str) and tc.strip().isdigit():
+            total = int(tc.strip())
+    elif isinstance(result, list):
+        items = result
+    else:
         raise LidlError(
             "Lidl: nieoczekiwany format listy paragonów: "
             + str(result)[:300]
         )
-    return result
+    return items, total
 
 
 def ticket_detail(

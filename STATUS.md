@@ -1,11 +1,18 @@
 # Status — HA_Budget_App (app add-on „Budżet domowy")
 
-Stan na: 2026-11-22. U usera działa **0.2.1→0.3.0** (potwierdzone:
-„działa!"; 0.3.1 miał regresję: sync wisiał w pętli stron — API Lidl
-prawdopodobnie ignoruje `skip`); na dysku gotowe **0.3.2** (testy
-zielone, w tym scenariusz „API ignoruje skip"): pętla stron zawsze się
-kończy (strona bez nowych id = koniec + limit 200 stron), status pokazuje
-numer strony, `tools/debug_lidl.py` z sondą paginacji ([5]/[6]).
+Stan na: 2026-11-23. U usera wdrożone **0.3.0→0.3.2** (0.3.1: regresja
+syncu — wisiał w pętli stron; 0.3.2: pętla się kończy, ale przy częściowo
+pobranej liście przerywał po stronie 1, bo jej id już były w bazie). Na
+dysku gotowe **0.3.3** (testy zielone, w tym nowy scenariusz „głęboka
+lista 52 poz. + wrapper `totalCount` + strona 1 już w bazie"):
+- koniec pętli = strona CAŁKOWICIE powtórzona W TYM PRZEBIEGU (API
+  ignoruje `skip`) albo `totalCount` zwracany przez API; paragony znane
+  z bazy są tylko pomijane (bez ponownego pobierania szczegółu),
+- `lidl.list_tickets` akceptuje format-wrapper listy (v17.9.3:
+  `page`/`size`/`totalCount` + `tickets`) i format-tablicy, zwraca
+  `(items, totalCount)`,
+- `tools/debug_lidl.py`: sonda [7] `pageNumber` + wykrywanie formatu
+  odpowiedzi ([5]/[6]/[7] + WNIOSKI).
 Wiele kont Lidl Plus (tabela `lidl_accounts`, zakładka „Lidl - paragony”
 — tylko nazwa + token, wspólne zestawienie), auto-księgowanie paragonów
 jako wydatków, lista kont żywa z bazy, status sync pogrubiony,
@@ -77,21 +84,28 @@ HA_Budget_App/
 - `C:\AI_Project\HA_News` (1.2.2) — w tle czeka wgranie na GitHub.
 - `C:\AI_Project\HA_Budget\Home Budget` — repo usera, nietknięte.
 
-## Następne kroki (user) — wdrożenie 0.3.2
+## Następne kroki (user) — wdrożenie 0.3.3
 1. GitHub Web UI (repo `ravek71/HA_Budget_App`, gałąź `main`): wgraj
    zawartość `C:\AI_Project\HA_Budget_App.zip` (całość — nadpisuje pliki,
-   commit message: „0.3.2”). Kluczowe: `budget/config.yaml` ma
-   `version: "0.3.2"` (tag obrazu GHCR = wersja z config.yaml).
+   commit message: „0.3.3”). Kluczowe: `budget/config.yaml` ma
+   `version: "0.3.3"` (tag obrazu GHCR = wersja z config.yaml).
 2. Actions → **Builder** → zielony (~2 min) → obraz
-   `ghcr.io/ravek71/budget-app:0.3.2`.
+   `ghcr.io/ravek71/budget-app:0.3.3`.
 3. HACS (⋮ → Check for updates, jeśli nie widać) → Add-ony → „Budżet
-   domowy" → **Update** (0.3.1 → 0.3.2) → panel F5.
-4. Panel → zakładka **Lidl - paragony**: stare konto z 0.2.x zostanie
-   zmigrowane automatycznie (token z opcji → tabela `lidl_accounts`).
-   Ewentualnie dodaj drugie konto (id + nazwa + token z
+   domowy" → **Update** (0.3.2 → 0.3.3) → panel F5.
+4. Panel → zakładka **Lidl - paragony**: konta są już z 0.3.x (nazwa +
+   token). Ewentualnie dodaj kolejne (nazwa + token z
    `tools/get_lidl_token.py` pod drugim loginem).
 5. Ustawienia paragonów: zaznacz auto-księgowanie + kategoria (albo
    auto-detekcja) → Zapisz → **Synchronizuj z Lidl Plus**.
-6. (Opcjonalnie) usunąć starą integrację HACS „Budżet domowy" z HA
+6. **Weryfikacja (kluczowa dla 0.3.3):** na liście paragonów mają się
+   pojawić paragony STARSZE niż ~12 mies. (w apce Lidl na telefonie są,
+   więc dane są w API). Status sync pokazuje numery stron — ma dojść do
+   końca listy (nie może wisnąć).
+7. Fallback, gdyby lista dalej się nie domykała: `python
+   C:\AI_Project\HA_Budget_App\tools\debug_lidl.py` (sonda [5]/[6]/[7]
+   pokaże format odpowiedzi i czy `skip`/`pageNumber` przesuwa listę) —
+   całość outputu do analizy.
+8. (Opcjonalnie) usunąć starą integrację HACS „Budżet domowy" z HA
    (Ustawienia → Urządzenia i usługi → Budżet domowy → Usuń) i repo
    `ravek71/HA_Budget`.
