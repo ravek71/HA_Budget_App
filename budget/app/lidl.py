@@ -8,8 +8,14 @@ the community, verified against app 17.9.3):
   *refresh token* for a short-lived access token. The refresh token
   ROTATES: every exchange returns a new one, which must be persisted.
 * Receipts microservice: ``tickets.lidlplus.com``.
-  - list:   ``GET /api/v2/{COUNTRY}/tickets?skip=&take=`` (JSON array,
-    newest first; fields: id, date, totalAmount, articlesCount, ...)
+  - list:   ``GET /api/v2/{COUNTRY}/tickets`` (JSON array — or a
+    wrapper object with ``tickets``/``totalCount`` depending on the
+    backend generation — newest first; fields: id, date, totalAmount,
+    articlesCount, ...). Pagination has TWO generations, and the
+    server silently ignores the parameter it does not know:
+    ``?skip=&take=`` (current app, page capped at ~25) or
+    ``?pageNumber=N&onlyFavorite=false`` (legacy, 1-based, page size
+    fixed by the server). The caller must probe which one works.
   - detail: ``GET /api/v3/{COUNTRY}/tickets/{id}`` (JSON; contains
     ``htmlPrintedReceipt`` — an HTML reproduction of the printed receipt)
 
@@ -123,17 +129,29 @@ def list_tickets(
     country: str,
     language: str,
     skip: int = 0,
-    take: int = 50,
+    take: int = 25,
+    page_number: int | None = None,
 ) -> tuple[list[dict], int | None]:
     """Paged receipts list (newest first).
 
     Returns ``(items, total_count)``. The server answers either a plain
     JSON array or a wrapper object (``tickets``/``items``/... plus
-    ``page``/``size``/``totalCount`` — varies by region/version); both
-    are accepted. ``total_count`` is the server-reported list length
-    when the wrapper carries ``totalCount``, else None.
+    ``page``/``size``/``totalCount`` — varies by backend generation);
+    both are accepted. ``total_count`` is the server-reported list
+    length when the wrapper carries ``totalCount``, else None.
+
+    Two pagination styles are supported (see the module docstring);
+    ``page_number`` (legacy, 1-based) wins over ``skip``/``take`` when
+    given. ``take`` defaults to 25 — the server's page cap — so a short
+    page really is the end of the list.
     """
-    url = f"{TICKETS_BASE}/v2/{country}/tickets?skip={skip}&take={take}"
+    if page_number is not None:
+        url = (
+            f"{TICKETS_BASE}/v2/{country}/tickets"
+            f"?pageNumber={int(page_number)}&onlyFavorite=false"
+        )
+    else:
+        url = f"{TICKETS_BASE}/v2/{country}/tickets?skip={skip}&take={take}"
     result = _http("GET", url, headers=_app_headers(access_token, language))
     items: list[dict]
     total: int | None = None

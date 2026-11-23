@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.3.4 (2026-11-23)
+
+- **Fix: lista nie domykała się, gdy backend konta ignoruje parametr
+  `skip`.** Nieregularne API Lidl Plus ma DWA pokolenia stronicowania
+  i milcząco ignoruje parametr, którego nie zna: `?skip=&take=`
+  (bieżąca apka 17.9.3) oraz `?pageNumber=N&onlyFavorite=false`
+  (legacy, 1-based; rozmiar strony ustala serwer). Sync teraz **sam
+  wykrywa mechanizm przy każdym przebiegu**: sonda drugiej strony
+  stylem `skip`, a gdy nie przesuwa listy — sonda stylem `pageNumber`;
+  zgodnie z wynikiem przechodzi listę (tryb `skip` lub `page`). Gdy
+  oba parametry są ignorowane i strona 1 jest pełna — status pokazuje
+  jawny błąd z instrukcją diagnostyki zamiast cicho przerywać po
+  ~25 paragonach.
+- `PAGE_TAKE = 25` (faktyczny cap serwera) — strona krótsza niż cap
+  naprawdę oznacza koniec listy (wg specyfikacji apki 17.9.3: koniec,
+  gdy strona < `take`).
+- Koniec pętli: `totalCount` z wrappera (gdy API go zwraca), strona
+  całkowicie powtórzona, pusta strona albo limit 200 stron. Fix 0.3.3
+  zostaje: pozycje znane z bazy NIE zatrzymują pętli.
+- `lidl.list_tickets` przyjmuje `page_number` (legacy, 1-based) oprócz
+  `skip`/`take`; `take` domyślnie 25.
+- Testy: nowy scenariusz „legacy API" — `skip` ignorowany,
+  `pageNumber` działa, 30 pozycji w 2 stronach, wrapper `totalCount`;
+  sync przechodzi listę w całości.
+
 ## 0.3.3 (2026-11-23)
 
 - **Fix: sync przerywał się po pierwszej stronie, gdy te paragony były już

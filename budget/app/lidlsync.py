@@ -6,7 +6,9 @@ sync run:
   1. for each account: exchange the stored refresh token for an access
      token (the refresh token ROTATES — the new one is persisted back into
      the account row),
-  2. walk the paged receipts list (newest first),
+  2. walk the paged receipts list (newest first) — the backend's
+     pagination style (``skip``/``take`` vs legacy ``pageNumber``) is
+     auto-detected on every run by probing a second page both ways,
   3. fetch the detail (v3) of every receipt not yet stored locally,
   4. upsert it into the ``receipts`` table (tagged with the account id),
   5. optionally book each new receipt as an expense transaction
@@ -33,7 +35,7 @@ from .data import BudgetData
 
 log = logging.getLogger(__name__)
 
-PAGE_TAKE = 50
+PAGE_TAKE = 25  # the server's page cap (take=50 still returns ~25)
 DETAIL_PAUSE_S = 0.25  # be gentle with the unofficial API
 MAX_PAGES = 200  # safety cap (200 x 50 = 10000 receipts)
 
@@ -202,41 +204,89 @@ class LidlSync:
         self._set_status(phase=f"{label}: logowanie...")
         known = set(self._data.receipt_ids())  # stored locally (no refetch)
         seen_run: set[str] = set()  # ids seen during THIS run (stuck pages)
-        skip, new, errors = 0, 0, 0
+        new, errors, fetched = 0, 0, 0
         total: int | None = None  # server-reported list length (if known)
-        for page_no in range(1, MAX_PAGES + 1):
-            self._set_status(
-                phase=f"{label}: strona {page_no} (od {skip})..."
-            )
-            page, total = self._with_retry(
+
+        # page 1 — skip=0 and pageNumber=1 carry the same content
+        self._set_status(phase=f"{label}: strona 1...")
+        page, total = self._with_retry(
+            account_id,
+            lidl.list_tickets,
+            country,
+            language,
+            skip=0,
+            take=PAGE_TAKE,
+        )
+        # detect how THIS backend pages: the unofficial API has two
+        # generations (skip/take vs legacy pageNumber) and silently
+        # ignores the parameter it does not know — probe a second page
+        # with both styles before walking the list
+        mode = "skip"
+        if page and (total is None or total > len(page)):
+            probe, t = self._with_retry(
                 account_id,
                 lidl.list_tickets,
                 country,
                 language,
-                skip=skip,
+                skip=PAGE_TAKE,
                 take=PAGE_TAKE,
             )
+            if t is not None:
+                total = t
+            first = set(_page_id_list(page))
+            probe_ids = set(_page_id_list(probe))
+            if probe_ids - first:
+                mode = "skip"  # skip advances the list
+            elif probe_ids == first:
+                # skip ignored (returned page 1 again) — try the legacy
+                # pageNumber style
+                legacy, t = self._with_retry(
+                    account_id,
+                    lidl.list_tickets,
+                    country,
+                    language,
+                    page_number=2,
+                )
+                if t is not None:
+                    total = t
+                leg_ids = set(_page_id_list(legacy))
+                if leg_ids and leg_ids == first:
+                    mode = "none"  # both parameters ignored
+                else:
+                    # new ids (works) or empty (list shorter than a
+                    # page) — "page" mode stops cleanly on the empty page
+                    mode = "page"
+            # else: probe empty -> list exhausted, skip works
+        log.info(
+            "lidl sync: %s: stronicowanie: %s (total=%s)",
+            label, mode, total,
+        )
+
+        skip, page_no, last = 0, 1, page
+        for page_no in range(1, MAX_PAGES + 1):
+            page = last
             if not page:
                 break
-            page_ids = [
-                str(item.get("id") or "").strip()
-                for item in page
-                if str(item.get("id") or "").strip()
-            ]
+            self._set_status(
+                phase=f"{label}: strona {page_no}"
+                      + (f" (od {skip})" if mode == "skip" else "")
+                      + f"... nowych: {new}"
+            )
+            page_ids = _page_id_list(page)
             # STUCK: the whole page repeats ids already seen in this run —
-            # the API does not advance with skip (it repeats the same page)
-            # and further pages would loop forever, so stop. IMPORTANT:
-            # ids already stored in the DB are NOT a stop condition — a
+            # the backend does not advance with the probed parameter and
+            # further pages would repeat forever, so stop. IMPORTANT: ids
+            # already stored in the DB are NOT a stop condition — a
             # previous sync may have stored page 1 while pages 2..N are
             # still missing and must be fetched now.
             if page_ids and set(page_ids) <= seen_run:
                 log.info(
-                    "lidl sync: %s: strona %d powtórzona — API nie "
-                    "przesuwa listy (ignoruje skip?) — koniec",
+                    "lidl sync: %s: strona %d powtórzona — koniec listy",
                     label, page_no,
                 )
                 break
             seen_run.update(page_ids)
+            fetched += len(page_ids)
             for item in page:
                 ticket_id = str(item.get("id") or "").strip()
                 if not ticket_id or ticket_id in known:
@@ -281,16 +331,47 @@ class LidlSync:
                     phase=f"{label}: pobieranie paragonów... nowych: {new}"
                 )
                 time.sleep(DETAIL_PAUSE_S)
-            # advance by the ACTUAL page length (the API caps it below
-            # the requested take); stop once the server-reported total
-            # is reached (authoritative end, when the wrapper provides it)
-            skip += len(page)
-            if total is not None and skip >= total:
+            # advance to the next page in the detected style; the
+            # server-reported total is the authoritative end when the
+            # wrapper provides it
+            if mode == "none" or (total is not None and fetched >= total):
                 break
+            if mode == "skip":
+                skip += len(page)
+                nxt, t = self._with_retry(
+                    account_id,
+                    lidl.list_tickets,
+                    country,
+                    language,
+                    skip=skip,
+                    take=PAGE_TAKE,
+                )
+            else:
+                nxt, t = self._with_retry(
+                    account_id,
+                    lidl.list_tickets,
+                    country,
+                    language,
+                    page_number=page_no + 1,
+                )
+            if t is not None:
+                total = t
+            last = nxt
         else:
             log.warning(
                 "lidl sync: %s: osiągnięto limit %d stron — lista może "
                 "nie zostać pobrana w całości", label, MAX_PAGES,
+            )
+        if mode == "none" and page and len(page) >= PAGE_TAKE:
+            # page 1 was stored above; a FULL page while BOTH parameters
+            # are ignored means the list is almost certainly longer —
+            # surface the limitation in the panel (last_error) instead of
+            # silently stopping. A short page IS the end of the list.
+            raise lidl.LidlError(
+                f"API nie przesuwa listy (skip i pageNumber ignorowane) — "
+                f"pobrano tylko pierwszą stronę ({len(page)} paragonów); "
+                f"starsze mogły nie zostać pobrane; diagnostyka: "
+                f"tools/debug_lidl.py"
             )
         if errors:
             log.warning("lidl sync: konto %s: %d paragonów pominiętych", label, errors)
@@ -365,3 +446,15 @@ def _to_json(value: Any) -> str:
         return json.dumps(value, ensure_ascii=False)
     except (TypeError, ValueError):
         return ""
+
+
+def _page_id_list(page: list[dict]) -> list[str]:
+    """Cleaned ticket ids of one list page (order kept, dups dropped)."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in page:
+        tid = str(item.get("id") or "").strip()
+        if tid and tid not in seen:
+            seen.add(tid)
+            out.append(tid)
+    return out
