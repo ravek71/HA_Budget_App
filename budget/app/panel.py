@@ -34,6 +34,9 @@ button.danger{background:none;color:var(--red);border-color:var(--line)}
 table{width:100%;border-collapse:collapse;font-size:14px}
 th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}
 td.num,th.num{text-align:right}
+th[data-rs]{cursor:pointer;user-select:none;white-space:nowrap}
+th[data-rs]:hover{color:var(--accent)}
+button:disabled{opacity:.45;cursor:default}
 .bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden;min-width:80px;flex:1}
 .bar i{display:block;height:100%;background:var(--green)}
 .bar i.over{background:var(--red)}
@@ -171,7 +174,26 @@ td.num,th.num{text-align:right}
     </div>
     <div class="card">
       <b>Paragony</b>
-      <table id="rtab"><thead><tr><th>Data</th><th>Konto</th><th>Sklep</th><th class="num">Pozycje</th><th class="num">Kwota</th><th></th></tr></thead><tbody></tbody></table>
+      <div class="row" style="margin-top:10px">
+        <span class="small">Wpisów na stronę:</span>
+        <select id="r-per" style="width:auto">
+          <option>10</option><option selected>25</option><option>50</option><option>100</option>
+        </select>
+        <span class="small" id="r-count"></span>
+      </div>
+      <table id="rtab" style="margin-top:8px"><thead><tr>
+        <th data-rs="date" data-rt="Data">Data</th>
+        <th data-rs="account" data-rt="Konto">Konto</th>
+        <th data-rs="store" data-rt="Sklep">Sklep</th>
+        <th class="num" data-rs="articles" data-rt="Pozycje">Pozycje</th>
+        <th class="num" data-rs="total" data-rt="Kwota">Kwota</th>
+        <th></th>
+      </tr></thead><tbody></tbody></table>
+      <div class="row" id="r-pager" style="margin-top:10px;justify-content:flex-end">
+        <button id="r-prev" class="ghost" style="padding:5px 12px">&larr; Poprzednia</button>
+        <span class="small" id="r-pageinfo"></span>
+        <button id="r-next" class="ghost" style="padding:5px 12px">Następna &rarr;</button>
+      </div>
     </div>
   </section>
 </main>
@@ -475,6 +497,108 @@ $("ht-next").onclick = () => { histM++; if (histM > 12) { histM = 1; histY++; } 
 
 let rTimer = null;
 let rAccounts = [];
+// ------------------------------------------------- receipts: sort + page
+let rAll = [];
+let rSortKey = "date", rSortDir = -1;  // default: date, newest first
+let rPage = 1, rPer = 25;
+function rAcctName(id) {
+  const a = rAccounts.find(x => x.id === id);
+  return a ? a.name : id;
+}
+function rPlural(n) {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return "paragon";
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return "paragony";
+  return "paragonów";
+}
+function rCmp(a, b) {
+  let va, vb;
+  if (rSortKey === "account") {
+    va = rAcctName(a.account || "lidl").toLowerCase();
+    vb = rAcctName(b.account || "lidl").toLowerCase();
+  } else if (rSortKey === "store") {
+    va = (a.store || "").toLowerCase();
+    vb = (b.store || "").toLowerCase();
+  } else if (rSortKey === "articles") {
+    va = a.articles || 0; vb = b.articles || 0;
+  } else if (rSortKey === "total") {
+    va = a.total || 0; vb = b.total || 0;
+  } else {
+    va = a.date || ""; vb = b.date || "";  // ISO — string compare = time order
+  }
+  if (va < vb) return -rSortDir;
+  if (va > vb) return rSortDir;
+  return 0;
+}
+function renderReceiptTable() {
+  const tb = $("rtab").querySelector("tbody");
+  const list = rAll.slice().sort(rCmp);
+  const total = list.length;
+  const pages = Math.max(1, Math.ceil(total / rPer));
+  if (rPage > pages) rPage = pages;
+  if (rPage < 1) rPage = 1;
+  document.querySelectorAll("#rtab th[data-rs]").forEach(th => {
+    let lab = th.dataset.rt;
+    if (th.dataset.rs === rSortKey) lab += (rSortDir === -1 ? " \u25bc" : " \u25b2");
+    th.textContent = lab;
+  });
+  tb.innerHTML = "";
+  if (!total) {
+    tb.innerHTML = '<tr><td colspan="6" class="small">Brak paragonów w lokalnej bazie — kliknij „Synchronizuj z Lidl Plus”.</td></tr>';
+  } else {
+    list.slice((rPage - 1) * rPer, rPage * rPer).forEach(x => {
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        '<td></td><td></td><td></td><td class="num"></td><td class="num neg"></td>' +
+        '<td style="text-align:right;white-space:nowrap"></td>';
+      tr.children[0].textContent = x.date;
+      tr.children[1].textContent = rAcctName(x.account || "lidl");
+      tr.children[2].textContent = x.store || "";
+      tr.children[3].textContent = x.articles ? String(x.articles) : "";
+      tr.children[4].textContent = "−" + money(x.total);
+      tr.children[5].innerHTML =
+        '<button class="ghost" data-rv="' + x.id + '" style="padding:3px 9px">pokaż</button> ' +
+        (x.booked_tx
+          ? '<button class="ghost" data-ru="' + x.id + '" style="padding:3px 9px">odblokuj</button> '
+          : '<button class="ghost" data-rb="' + x.id + '" style="padding:3px 9px">zaksięguj</button> ') +
+        '<button class="danger" data-rd="' + x.id + '" style="padding:3px 9px">usuń</button>';
+      tb.appendChild(tr);
+    });
+  }
+  tb.querySelectorAll("[data-rv]").forEach(b => {
+    b.onclick = () => window.open(API_DIR + "api/receipts/" + b.dataset.rv + "/print", "_blank");
+  });
+  tb.querySelectorAll("[data-rb]").forEach(b => {
+    b.onclick = async () => {
+      try {
+        await api("/api/receipts/" + b.dataset.rb + "/book", { method: "POST", body: JSON.stringify({ category: $("r-autocat").value || "" }) });
+        msg("Zaksięgowano paragon jako wydatek", "ok"); loadReceipts();
+      } catch (e) { msg(e.message, "err"); }
+    };
+  });
+  tb.querySelectorAll("[data-ru]").forEach(b => {
+    b.onclick = async () => {
+      if (!confirm("Usunąć transakcję wytworzoną z tego paragonu? (paragon zostaje)")) return;
+      try {
+        await api("/api/receipts/" + b.dataset.ru + "/book", { method: "DELETE" });
+        msg("Usunięto transakcję paragonu", "ok"); loadReceipts();
+      } catch (e) { msg(e.message, "err"); }
+    };
+  });
+  tb.querySelectorAll("[data-rd]").forEach(b => {
+    b.onclick = async () => {
+      if (!confirm("Usunąć paragon z lokalnej bazy? (w Lidl Plus zostaje; ewentualna transakcja również zostaje)")) return;
+      try {
+        await api("/api/receipts/" + b.dataset.rd, { method: "DELETE" });
+        msg("Usunięto", "ok"); loadReceipts();
+      } catch (e) { msg(e.message, "err"); }
+    };
+  });
+  $("r-count").textContent = total ? "razem: " + total + " " + rPlural(total) : "";
+  $("r-pageinfo").textContent = total ? "strona " + rPage + " z " + pages : "";
+  $("r-prev").disabled = rPage <= 1;
+  $("r-next").disabled = rPage >= pages;
+}
 async function loadReceipts() {
   clearTimeout(rTimer);
   rTimer = null;
@@ -483,10 +607,6 @@ async function loadReceipts() {
     r = await api("/api/receipts");
   } catch (e) { msg(e.message, "err"); return; }
   rAccounts = r.accounts || [];
-  const acctName = (id) => {
-    const a = rAccounts.find(x => x.id === id);
-    return a ? a.name : id;
-  };
   // accounts
   const al = $("r-accounts");
   al.innerHTML = "";
@@ -548,62 +668,9 @@ async function loadReceipts() {
   else meta.textContent =
     (r.last_sync ? "Ostatnia synchronizacja: " + r.last_sync + " (nowych paragonów: " + (r.last_new ?? "?") + ")" : "Jeszcze nie synchronizowano") +
     (r.last_error ? " · Błąd: " + r.last_error : "");
-  // receipts table
-  const tb = $("rtab").querySelector("tbody");
-  tb.innerHTML = "";
-  if (!r.receipts.length) {
-    tb.innerHTML = '<tr><td colspan="6" class="small">Brak paragonów w lokalnej bazie — kliknij „Synchronizuj z Lidl Plus”.</td></tr>';
-    return;
-  }
-  r.receipts.forEach(x => {
-    const tr = document.createElement("tr");
-    tr.innerHTML =
-      '<td></td><td></td><td></td><td class="num"></td><td class="num neg"></td>' +
-      '<td style="text-align:right;white-space:nowrap"></td>';
-    tr.children[0].textContent = x.date;
-    tr.children[1].textContent = acctName(x.account || "lidl");
-    tr.children[2].textContent = x.store || "";
-    tr.children[3].textContent = x.articles ? String(x.articles) : "";
-    tr.children[4].textContent = "−" + money(x.total);
-    let btns =
-      '<button class="ghost" data-rv="' + x.id + '" style="padding:3px 9px">pokaż</button> ' +
-      (x.booked_tx
-        ? '<button class="ghost" data-ru="' + x.id + '" style="padding:3px 9px">odblokuj</button> '
-        : '<button class="ghost" data-rb="' + x.id + '" style="padding:3px 9px">zaksięguj</button> ') +
-      '<button class="danger" data-rd="' + x.id + '" style="padding:3px 9px">usuń</button>';
-    tr.children[5].innerHTML = btns;
-    tb.appendChild(tr);
-  });
-  tb.querySelectorAll("[data-rv]").forEach(b => {
-    b.onclick = () => window.open(API_DIR + "api/receipts/" + b.dataset.rv + "/print", "_blank");
-  });
-  tb.querySelectorAll("[data-rb]").forEach(b => {
-    b.onclick = async () => {
-      let cat = sel.value || "";
-      try {
-        await api("/api/receipts/" + b.dataset.rb + "/book", { method: "POST", body: JSON.stringify({ category: cat }) });
-        msg("Zaksięgowano paragon jako wydatek", "ok"); loadReceipts();
-      } catch (e) { msg(e.message, "err"); }
-    };
-  });
-  tb.querySelectorAll("[data-ru]").forEach(b => {
-    b.onclick = async () => {
-      if (!confirm("Usunąć transakcję wytworzoną z tego paragonu? (paragon zostaje)")) return;
-      try {
-        await api("/api/receipts/" + b.dataset.ru + "/book", { method: "DELETE" });
-        msg("Usunięto transakcję paragonu", "ok"); loadReceipts();
-      } catch (e) { msg(e.message, "err"); }
-    };
-  });
-  tb.querySelectorAll("[data-rd]").forEach(b => {
-    b.onclick = async () => {
-      if (!confirm("Usunąć paragon z lokalnej bazy? (w Lidl Plus zostaje; ewentualna transakcja również zostaje)")) return;
-      try {
-        await api("/api/receipts/" + b.dataset.rd, { method: "DELETE" });
-        msg("Usunięto", "ok"); loadReceipts();
-      } catch (e) { msg(e.message, "err"); }
-    };
-  });
+  // receipts table — sortable + paginated (state: rAll/rSortKey/rSortDir/rPage)
+  rAll = r.receipts || [];
+  renderReceiptTable();
   if (r.syncing) rTimer = setTimeout(loadReceipts, 3000);
 }
 
@@ -639,6 +706,27 @@ $("r-sync").onclick = async () => {
     msg("Synchronizacja rozpoczęta — status poniżej", "ok");
     loadReceipts();
   } catch (e) { msg(e.message, "err"); }
+};
+
+// receipts: column sorting (click a header; click again to flip) + pagination
+document.querySelectorAll("#rtab th[data-rs]").forEach(th => {
+  th.onclick = () => {
+    const k = th.dataset.rs;
+    if (rSortKey === k) rSortDir *= -1;
+    else { rSortKey = k; rSortDir = (k === "date") ? -1 : 1; }
+    rPage = 1;
+    renderReceiptTable();
+  };
+});
+$("r-per").onchange = () => {
+  rPer = parseInt($("r-per").value, 10) || 25;
+  rPage = 1;
+  renderReceiptTable();
+};
+$("r-prev").onclick = () => { if (rPage > 1) { rPage--; renderReceiptTable(); } };
+$("r-next").onclick = () => {
+  const pages = Math.max(1, Math.ceil(rAll.length / rPer));
+  if (rPage < pages) { rPage++; renderReceiptTable(); }
 };
 
 show("pulpit");

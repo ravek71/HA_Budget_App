@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.5 (2026-11-23)
+
+- **Sortowanie tabeli paragonów** (zakładka „Lidl - paragony"): klik w
+  nagłówek kolumny **Data / Konto / Sklep / Pozycje / Kwota** sortuje po
+  tej kolumnie; ponowne kliknięcie odwraca kierunek (strzałka ▼/▲ w
+  nagłówku pokazuje aktywną kolumnę i kierunek). Domyślnie: Data ▼
+  (najnowsze na górze, jak wcześniej). Konto sortuje po NAZWIE konta.
+- **Paginacja tabeli paragonów**: wybór liczby wpisów na stronę
+  (**10 / 25 / 50 / 100**, domyślnie 25), przyciski
+  „← Poprzednia / Następna →" + „strona X z Y" i licznik „razem: N
+  paragonów" (poprawna polska odmiana). Sortowanie i strona przetrwają
+  odświeżanie podczas synchronizacji.
+- Zmiana czysto panelowa (JS po stronie klienta — API bez zmian),
+  więc działa też na telefonie (mały flex, przyciski dotykowe).
+
 ## 0.3.4 (2026-11-23)
 
 - **Fix: lista nie domykała się, gdy backend konta ignoruje parametr

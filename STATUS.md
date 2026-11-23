@@ -1,6 +1,15 @@
 # Status — HA_Budget_App (app add-on „Budżet domowy")
 
-Stan na: 2026-11-23. Feedback po 0.3.3: lista dalej się nie domyka
+Stan na: 2026-11-23. **0.3.4 zweryfikowany u usera: „działa pobieranie!"**
+(lista domknięta, paragony starsze niż 09-2026 się pojawiły). Na dysku
+gotowe **0.3.5** (testy zielone): sortowanie tabeli paragonów (klik w
+nagłówek: Data/Konto/Sklep/Pozycje/Kwota, ▼/▲, domyślnie Data ▼) +
+paginacja (10/25/50/100 wpisów na stronę, „strona X z Y", licznik „razem:
+N paragonów") — czysta zmiana panelowa (JS), API bez zmian.
+
+---
+
+Archiwum: stan przed 0.3.5. Feedback po 0.3.3: lista dalej się nie domyka
 (najnowszy paragon wciąż z 2026-09-11, czyli wciąż tylko strona 1,
 ~25 pozycji). Wniosek: backend tego konta **ignoruje `skip`** —
 nieoficjalne API Lidl ma dwa pokolenia stronicowania i milcząco
@@ -91,27 +100,20 @@ HA_Budget_App/
 - `C:\AI_Project\HA_News` (1.2.2) — w tle czeka wgranie na GitHub.
 - `C:\AI_Project\HA_Budget\Home Budget` — repo usera, nietknięte.
 
-## Następne kroki (user) — wdrożenie 0.3.4
+## Następne kroki (user) — wdrożenie 0.3.5
 1. GitHub Web UI (repo `ravek71/HA_Budget_App`, gałąź `main`): wgraj
    zawartość `C:\AI_Project\HA_Budget_App.zip` (całość — nadpisuje pliki,
-   commit message: „0.3.4”). Kluczowe: `budget/config.yaml` ma
-   `version: "0.3.4"` (tag obrazu GHCR = wersja z config.yaml).
+   commit message: „0.3.5”). Kluczowe: `budget/config.yaml` ma
+   `version: "0.3.5"` (tag obrazu GHCR = wersja z config.yaml).
 2. Actions → **Builder** → zielony (~2 min) → obraz
-   `ghcr.io/ravek71/budget-app:0.3.4`.
+   `ghcr.io/ravek71/budget-app:0.3.5`.
 3. HACS (⋮ → Check for updates, jeśli nie widać) → Add-ony → „Budżet
-   domowy" → **Update** (→ 0.3.4) → panel F5.
-4. Panel → zakładka **Lidl - paragony** → **Synchronizuj z Lidl Plus**.
-5. **Weryfikacja (kluczowa dla 0.3.4):** na liście paragonów mają się
-   pojawić paragony STARSZE niż 2026-09-11 (w apce Lidl na telefonie są
-   — dane są w API). Sync sam wykrywa mechanizm stronicowania; status
-   pokazuje numery stron i ma dojść do końca listy (nie może wisnąć).
-6. Jeśli status pokaże błąd „API nie przesuwa listy (skip i pageNumber
-   ignorowane)" — oba mechanizmy nie działają, trzeba zajrzeć do API:
-   `python C:\AI_Project\HA_Budget_App\tools\debug_lidl.py` (sonda
-   [5]/[6]/[7] pokaże format odpowiedzi i czy `skip`/`pageNumber`
-   przesuwa listę) — całość outputu do analizy. **Kluczowe: wartość
-   `totalCount`** — jeśli = 25, to lista źródłowa sama się kończy po
-   25 i starsze paragony trzeba brać z innego endpointu.
-7. (Opcjonalnie) usunąć starą integrację HACS „Budżet domowy" z HA
+   domowy" → **Update** (→ 0.3.5) → panel F5.
+4. Panel → zakładka **Lidl - paragony**: tabela paragonów — klik w
+   nagłówek (Data/Konto/Sklep/Pozycje/Kwota) = sortowanie, poniżej
+   wybór „Wpisów na stronę" (10/25/50/100) + strzałki stron.
+5. (Tło, gotowe) HA_News 1.2.2: wgranie na GitHub + Update in-place +
+   test linków na telefonie.
+6. (Opcjonalnie) usunąć starą integrację HACS „Budżet domowy" z HA
    (Ustawienia → Urządzenia i usługi → Budżet domowy → Usuń) i repo
    `ravek71/HA_Budget`.
