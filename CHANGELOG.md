@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.3.6 (2026-11-23)
+
+- **Starsze paragony bez treści (pusty html)** — Lidl Plus udostępnia treść
+  cyfrową bonu (`htmlPrintedReceipt`) tylko dla nowszych paragonów; starsze
+  przychodzą w detailu **bez treści**. Dzięki 0.3.4 sync pobiera całą historię,
+  więc „pokaż" dla starszego paragonu pokazywał goły błąd „Brak treści
+  paragonu w bazie". Teraz:
+  - **„Pokaż" dla paragonu bez treści** wyświetla **kartę z metadanymi**
+    (data, sklep, pozycje, kwota, ID paragonu) + informację, że Lidl nie
+    udostępnia treści cyfrowej dla tego bonu — paragon i tak można
+    zaksięgować.
+  - **Fallback nazwy pola treści**: klient bierze `htmlPrintedReceipt`
+    (bieżące pokolenie) lub `html` (starsze pokolenie) — pierwsze
+    niepuste.
+  - **Fallback kwoty/z daty**: jeśli detail nie ma `totalAmount`/`date`,
+    wartości pochodzą z wpisu listy (gwarancja specyfikacji API).
+  - Logowanie: sync policzy i wypisze liczbę paragonów bez treści html
+    (widoczne w logach add-onu), żeby wiedzieć, ile starszych bonów tak
+    właśnie wygląda.
+- **Diagnostyka `tools/debug_lidl.py` [8]**: nowa sonda porównuje detail
+  NAJNOWSZEGO vs NAJSTARSZEGO paragonu (wszystkie klucze + pola treści:
+  `htmlPrintedReceipt`/`html`/`pdfUrl`/`ticketUrl`) i podaje WNIOSK — czy
+  starsze bony w ogóle mają treść i w jakim polu.
+
 ## 0.3.5 (2026-11-23)
 
 - **Sortowanie tabeli paragonów** (zakładka „Lidl - paragony"): klik w

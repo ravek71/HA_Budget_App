@@ -1,15 +1,27 @@
 # Status — HA_Budget_App (app add-on „Budżet domowy")
 
 Stan na: 2026-11-23. **0.3.4 zweryfikowany u usera: „działa pobieranie!"**
-(lista domknięta, paragony starsze niż 09-2026 się pojawiły). Na dysku
-gotowe **0.3.5** (testy zielone): sortowanie tabeli paragonów (klik w
-nagłówek: Data/Konto/Sklep/Pozycje/Kwota, ▼/▲, domyślnie Data ▼) +
-paginacja (10/25/50/100 wpisów na stronę, „strona X z Y", licznik „razem:
-N paragonów") — czysta zmiana panelowa (JS), API bez zmian.
+(lista domknięta, paragony starsze niż 09-2026 się pojawiły).
+**Nowy problem od usera po 0.3.4:** „pokaż" dla paragonów starszych niż
+~2026-03-25 pokazuje „Brak treści paragonu w bazie (pusty html)" — Lidl
+Plus udostępnia treść cyfrową bonu (`htmlPrintedReceipt`) tylko dla
+nowszych paragonów; starsze przychodzą w detailu bez treści (metadane są
+OK). Na dysku gotowe **0.3.6** (testy zielone, w tym nowy scenariusz K6
+= stare pokolenie detailu: legacy key `html`, brak treści, kwota tylko w
+liście): „pokaż" bez treści = karta metadanych (data/sklep/pozycje/kwota/ID)
++ wyjaśnienie, klient bierze `htmlPrintedReceipt` LUB `html`, fallback
+kwoty/z daty z wpisu listy, loguje liczbę paragonów bez treści;
+`debug_lidl.py` sonda [8] porównuje detail najnowszego vs najstarszego
+bonu (klucze + pola treści + WNIOSK).
+
+0.3.5 (też na dysku, czysto panelowe): sortowanie tabeli paragonów
+(klik w nagłówek: Data/Konto/Sklep/Pozycje/Kwota, ▼/▲, domyślnie Data ▼)
++ paginacja (10/25/50/100 wpisów na stronę, „strona X z Y", licznik
+„razem: N paragonów") — JS, API bez zmian.
 
 ---
 
-Archiwum: stan przed 0.3.5. Feedback po 0.3.3: lista dalej się nie domyka
+Archiwum: stan przed 0.3.6/0.3.5. Feedback po 0.3.3: lista dalej się nie domyka
 (najnowszy paragon wciąż z 2026-09-11, czyli wciąż tylko strona 1,
 ~25 pozycji). Wniosek: backend tego konta **ignoruje `skip`** —
 nieoficjalne API Lidl ma dwa pokolenia stronicowania i milcząco
@@ -100,20 +112,28 @@ HA_Budget_App/
 - `C:\AI_Project\HA_News` (1.2.2) — w tle czeka wgranie na GitHub.
 - `C:\AI_Project\HA_Budget\Home Budget` — repo usera, nietknięte.
 
-## Następne kroki (user) — wdrożenie 0.3.5
+## Następne kroki (user) — wdrożenie 0.3.6
 1. GitHub Web UI (repo `ravek71/HA_Budget_App`, gałąź `main`): wgraj
    zawartość `C:\AI_Project\HA_Budget_App.zip` (całość — nadpisuje pliki,
-   commit message: „0.3.5”). Kluczowe: `budget/config.yaml` ma
-   `version: "0.3.5"` (tag obrazu GHCR = wersja z config.yaml).
+   commit message: „0.3.6”). Kluczowe: `budget/config.yaml` ma
+   `version: "0.3.6"` (tag obrazu GHCR = wersja z config.yaml).
 2. Actions → **Builder** → zielony (~2 min) → obraz
-   `ghcr.io/ravek71/budget-app:0.3.5`.
+   `ghcr.io/ravek71/budget-app:0.3.6`.
 3. HACS (⋮ → Check for updates, jeśli nie widać) → Add-ony → „Budżet
-   domowy" → **Update** (→ 0.3.5) → panel F5.
-4. Panel → zakładka **Lidl - paragony**: tabela paragonów — klik w
-   nagłówek (Data/Konto/Sklep/Pozycje/Kwota) = sortowanie, poniżej
-   wybór „Wpisów na stronę" (10/25/50/100) + strzałki stron.
-5. (Tło, gotowe) HA_News 1.2.2: wgranie na GitHub + Update in-place +
+   domowy" → **Update** (→ 0.3.6) → panel F5.
+4. Panel → zakładka **Lidl - paragony** → klik „pokaż" dla paragonu
+   STARSZEGO niż ~2026-03-25 (dotąd „Brak treści paragonu w bazie"):
+   teraz ma być **karta z metadanymi** (data, sklep, pozycje, kwota, ID)
+   + informacja, że Lidl nie udostępnia treści cyfrowej dla tego bonu.
+5. (Wersja 0.3.5 jest w tym samym ZIP-ie, więc ląduje naraz): tabela
+   paragonów — klik w nagłówek (Data/Konto/Sklep/Pozycje/Kwota) =
+   sortowanie, wybór „Wpisów na stronę" (10/25/50/100) + strzałki stron.
+6. (Opcjonalnie, jeśli chcesz wiedzieć, czy starsze bony mają treść w
+   innym polu) na PC: `python C:\AI_Project\HA_Budget_App\tools\debug_lidl.py`
+   → sonda [8] porównuje detail najnowszego vs najstarszego bonu (klucze
+   + pola treści + WNIOSK). Całość outputu do analizy.
+7. (Tło, gotowe) HA_News 1.2.2: wgranie na GitHub + Update in-place +
    test linków na telefonie.
-6. (Opcjonalnie) usunąć starą integrację HACS „Budżet domowy" z HA
+8. (Opcjonalnie) usunąć starą integrację HACS „Budżet domowy" z HA
    (Ustawienia → Urządzenia i usługi → Budżet domowy → Usuń) i repo
    `ravek71/HA_Budget`.

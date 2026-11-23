@@ -204,7 +204,7 @@ class LidlSync:
         self._set_status(phase=f"{label}: logowanie...")
         known = set(self._data.receipt_ids())  # stored locally (no refetch)
         seen_run: set[str] = set()  # ids seen during THIS run (stuck pages)
-        new, errors, fetched = 0, 0, 0
+        new, errors, fetched, no_html = 0, 0, 0, 0
         total: int | None = None  # server-reported list length (if known)
 
         # page 1 — skip=0 and pageNumber=1 carry the same content
@@ -305,19 +305,38 @@ class LidlSync:
                         "lidl sync: paragon %s pominięty: %s", ticket_id, exc
                     )
                     continue
+                # printed content: current backends use
+                # htmlPrintedReceipt, older generations may carry it
+                # under "html" — take the first non-empty
+                html = str(
+                    detail.get("htmlPrintedReceipt") or detail.get("html") or ""
+                )
+                if not html.strip():
+                    # Lidl Plus keeps the digital receipt content only
+                    # for recent tickets; older ones arrive without it.
+                    # The metadata below is still stored and bookable.
+                    no_html += 1
+                    log.info(
+                        "lidl sync: %s: paragon %s bez tresci html "
+                        "(starszy bon?)", label, ticket_id,
+                    )
                 self._data.upsert_receipt(
                     receipt_id=ticket_id,
                     date_str=str(
                         detail.get("date") or item.get("date") or ""
                     ),
                     store=_store_label(detail.get("store")),
-                    total=_to_float(detail.get("totalAmount")),
+                    total=_to_float(
+                        detail.get("totalAmount")
+                        or item.get("totalAmount")
+                        or 0
+                    ),
                     articles=int(
                         detail.get("articlesCount")
                         or item.get("articlesCount")
                         or 0
                     ),
-                    html=str(detail.get("htmlPrintedReceipt") or ""),
+                    html=html,
                     raw=_to_json(detail),
                     datetime_str=str(
                         detail.get("date") or item.get("date") or ""
@@ -375,6 +394,13 @@ class LidlSync:
             )
         if errors:
             log.warning("lidl sync: konto %s: %d paragonów pominiętych", label, errors)
+        if no_html:
+            log.warning(
+                "lidl sync: %s: %d paragonów bez treści html — Lidl Plus "
+                "udostępnia treść cyfrową tylko dla nowszych bonów "
+                "(metadane zapisano, panel pokaze dane podstawowe)",
+                label, no_html,
+            )
         return new
 
     # --------------------------------------------------------------- booking

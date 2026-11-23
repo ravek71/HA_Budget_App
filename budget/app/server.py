@@ -5,6 +5,7 @@ the /api/* endpoints below.
 """
 from __future__ import annotations
 
+import html as html_mod
 import logging
 import re
 from datetime import date
@@ -415,9 +416,49 @@ def make_app(data: BudgetData, sync: Optional[LidlSync] = None) -> Flask:
             return _err("brak paragonu o tym id", 404)
         html = rec.get("html") or ""
         if not html.strip():
+            # Older receipts: Lidl Plus serves the printed content only
+            # for recent tickets. Instead of a bare error, show the
+            # metadata that WAS stored (date/store/total are still
+            # useful and still bookable).
+            def _row(label: str, value: str) -> str:
+                return (
+                    "<div class='row'><span>" + label + "</span>"
+                    "<b>" + html_mod.escape(value) + "</b></div>"
+                )
+
+            parts = ["<div class='row'><span>Data</span><b>"
+                     + html_mod.escape(str(rec.get("date") or "")[:16])
+                     + "</b></div>"]
+            store = str(rec.get("store") or "").strip()
+            if store:
+                parts.append(_row("Sklep", store))
+            if rec.get("articles"):
+                parts.append(_row("Pozycje", str(rec["articles"])))
+            parts.append(
+                _row("Kwota", f"{float(rec.get('total') or 0):.2f}".replace(".", ",") + " zł")
+            )
+            parts.append(_row("ID paragonu", str(rec.get("id") or ticket_id)))
             return Response(
-                "<html><body><p>Brak treści paragonu w bazie (pusty html).</p>"
-                "</body></html>",
+                "<!doctype html><html><head><meta charset='utf-8'>"
+                "<title>Paragon Lidl " + html_mod.escape(str(ticket_id)[:16])
+                + "</title>"
+                "<style>body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;"
+                "background:#f6f7fb;color:#1c1e26;margin:0;padding:24px}"
+                ".rc{max-width:420px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;"
+                "border-radius:12px;padding:20px 22px;font-size:15px}"
+                "h2{margin:0 0 12px;font-size:17px}"
+                ".row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;"
+                "border-bottom:1px solid #eef0f3}.row:last-child{border-bottom:none}"
+                ".row span{color:#6b7280}.note{max-width:420px;margin:14px auto 0;"
+                "font-size:13px;color:#6b7280;line-height:1.45}"
+                "@media print{body{background:#fff;padding:0}.note{display:none}"
+                ".rc{border:none}}}</style>"
+                "</head><body><div class='rc'><h2>Lidl Plus — paragon</h2>"
+                + "".join(parts)
+                + "</div><p class='note'>Treść paragonu (lista produktów) nie została "
+                "pobrana — Lidl Plus udostępnia treść cyfrową tylko dla nowszych bonów. "
+                "Dane podstawowe (data, sklep, kwota) zapisano podczas synchronizacji; "
+                "paragon można zaksięgować jak każdy inny.</p></body></html>",
                 mimetype="text/html",
             )
         if "<html" not in html.lower():

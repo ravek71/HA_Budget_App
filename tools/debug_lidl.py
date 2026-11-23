@@ -194,6 +194,61 @@ def main() -> None:
         else:
             print("WNIOSK [7]: 'pageNumber' nie zwrócił listy.")
 
+    # [8] sonda detailu (0.3.6): czy STARSZE bony mają treść i w jakim
+    # polu? Porównanie detailu najnowszego vs najstarszego paragonu.
+    def has_content(j: dict) -> bool:
+        for key in ("htmlPrintedReceipt", "html", "pdfUrl", "ticketUrl"):
+            v = j.get(key)
+            if isinstance(v, str) and v.strip():
+                return True
+        return False
+
+    def detail_probe(tag: str, tid: str) -> dict:
+        st, b = show(tag, f"https://tickets.lidlplus.com/api/v3/{COUNTRY}/tickets/{tid}")
+        try:
+            j = json.loads(b)
+        except ValueError:
+            print("    -> brak JSON w odpowiedzi detailu (patrz body powyżej)")
+            return {}
+        if not isinstance(j, dict):
+            print(f"    -> detail nie jest obiektem JSON: {str(j)[:200]}")
+            return {}
+        print(f"    -> klucze ({len(j)}): {sorted(j.keys())}")
+        for key in (
+            "htmlPrintedReceipt", "html", "pdfUrl", "ticketUrl",
+            "ticketType", "printedReceiptState", "isHtml", "isDeleted",
+            "hasInvoice", "date", "totalAmount",
+        ):
+            v = j.get(key)
+            if isinstance(v, str):
+                print(f"    -> {key}: ({len(v)} znakow) {v[:120]!r}")
+            elif v is None:
+                print(f"    -> {key}: BRAK/null")
+            else:
+                print(f"    -> {key}: {json.dumps(v, ensure_ascii=False)[:120]}")
+        return j
+
+    print()
+    if ids5:
+        newest = detail_probe("8a", ids5[0])
+        print()
+        oldest = detail_probe("8b", ids5[-1])
+        print()
+        if len(ids5) < 2:
+            print("WNIOSK [8]: na liście jest tylko 1 paragon — porównanie niemożliwe.")
+        elif has_content(newest) and not has_content(oldest):
+            print("WNIOSK [8]: NAJSTARSZY bon NIE MA treści (brak htmlPrintedReceipt/"
+                  "html/pdfUrl) — Lidl udostępnia treść cyfrową tylko dla nowszych "
+                  "bonów; metadane (data, kwota) są dostępne.")
+        elif has_content(oldest):
+            print("WNIOSK [8]: NAJSTARSZY bon MA treść — sprawdź, w jakim polu "
+                  "(patrz klucze powyżej); klient ma ją pobrać.")
+        else:
+            print("WNIOSK [8]: ŻADNY z detaili nie zwraca treści — patrz [8a]/[8b] "
+                  "(może błąd autoryzacji lub format).")
+    else:
+        print("[8] — brak listy, pomijam sondę detailu.")
+
     print()
     print("== KONIEC. Skopiuj CAŁY ten output i prześlij.")
 
